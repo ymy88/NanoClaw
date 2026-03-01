@@ -177,8 +177,11 @@ function buildVolumeMounts(
     group.folder,
     'agent-runner-src',
   );
-  if (!fs.existsSync(groupAgentRunnerDir) && fs.existsSync(agentRunnerSrc)) {
-    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+  if (fs.existsSync(agentRunnerSrc)) {
+    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, {
+      recursive: true,
+      force: true,
+    });
   }
   mounts.push({
     hostPath: groupAgentRunnerDir,
@@ -204,7 +207,14 @@ function buildVolumeMounts(
  * Secrets are never written to disk or mounted as files.
  */
 function readSecrets(): Record<string, string> {
-  return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
+  return readEnvFile([
+    'CLAUDE_CODE_OAUTH_TOKEN',
+    'ANTHROPIC_API_KEY',
+    'CLAUDE_CODE_USE_VERTEX',
+    'CLOUD_ML_REGION',
+    'ANTHROPIC_VERTEX_PROJECT_ID',
+    'GOOGLE_APPLICATION_CREDENTIALS',
+  ]);
 }
 
 function buildContainerArgs(
@@ -212,6 +222,10 @@ function buildContainerArgs(
   containerName: string,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
+
+  // Ensure host.docker.internal resolves inside the container.
+  // Built-in on macOS Docker Desktop; on Linux requires this flag (Docker 20.10+).
+  args.push('--add-host=host.docker.internal:host-gateway');
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
@@ -224,6 +238,28 @@ function buildContainerArgs(
   if (hostUid != null && hostUid !== 0 && hostUid !== 1000) {
     args.push('--user', `${hostUid}:${hostGid}`);
     args.push('-e', 'HOME=/home/node');
+  }
+
+  // Forward proxy env vars into the container, rewriting localhost addresses
+  // to host.docker.internal so the container can reach the host's proxy.
+  const PROXY_VARS = [
+    'http_proxy',
+    'https_proxy',
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'no_proxy',
+    'NO_PROXY',
+    'socks_proxy',
+    'SOCKS_PROXY',
+  ] as const;
+  for (const key of PROXY_VARS) {
+    const val = process.env[key];
+    if (val) {
+      args.push(
+        '-e',
+        `${key}=${val.replace(/127\.0\.0\.1|localhost/g, 'host.docker.internal')}`,
+      );
+    }
   }
 
   for (const mount of mounts) {
@@ -251,6 +287,23 @@ export async function runContainerAgent(
   fs.mkdirSync(groupDir, { recursive: true });
 
   const mounts = buildVolumeMounts(group, input.isMain);
+
+  // Read secrets and mount Google credentials file before building container
+  // args, so the mount is included in the docker run command.
+  const secrets = readSecrets();
+  if (secrets.GOOGLE_APPLICATION_CREDENTIALS) {
+    const hostPath = secrets.GOOGLE_APPLICATION_CREDENTIALS;
+    if (fs.existsSync(hostPath)) {
+      const containerPath = '/tmp/gcloud-credentials.json';
+      mounts.push({
+        hostPath: fs.realpathSync(hostPath),
+        containerPath,
+        readonly: true,
+      });
+      secrets.GOOGLE_APPLICATION_CREDENTIALS = containerPath;
+    }
+  }
+
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
   const containerArgs = buildContainerArgs(mounts, containerName);
@@ -294,7 +347,7 @@ export async function runContainerAgent(
     let stderrTruncated = false;
 
     // Pass secrets via stdin (never written to disk or mounted as files)
-    input.secrets = readSecrets();
+    input.secrets = secrets;
     container.stdin.write(JSON.stringify(input));
     container.stdin.end();
     // Remove secrets from input so they don't appear in logs

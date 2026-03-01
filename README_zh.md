@@ -1,3 +1,17 @@
+# NanoClaw (Fork)
+
+Fork 自 [qwibitai/nanoclaw](https://github.com/qwibitai/nanoclaw)。
+
+## 本 Fork 新增功能
+
+- **Vertex AI 支持** - 通过 Google Vertex AI 运行 Claude，或结合 Anthropic API 使用 Vertex AI 进行图像生成
+- **图像生成** - 使用 Vertex AI 上的 Gemini 图像模型生成图片，并直接发送到聊天中（`/generate-image` 技能）
+- **图像理解** - 在 Slack 中上传图片，智能体可以查看并回复
+- **自定义人设** - 通过 gitignored 的 `PERSONALITY.md` 定义智能体的角色性格——每个安装都可以有自己独特的人设
+- **Slack 渠道** - 完整的 Slack 集成，支持图片发送
+
+---
+
 <p align="center">
   <img src="assets/nanoclaw-logo.png" alt="NanoClaw" width="400">
 </p>

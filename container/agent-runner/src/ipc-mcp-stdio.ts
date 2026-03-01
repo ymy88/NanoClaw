@@ -63,6 +63,46 @@ server.tool(
 );
 
 server.tool(
+  'send_image',
+  'Send an image file to the user or group. The file must exist under /workspace/group/. Use this after generating or downloading an image to share it in the chat.',
+  {
+    file_path: z.string().describe('Absolute path to the image file (must be under /workspace/group/)'),
+    caption: z.string().optional().describe('Optional caption to send with the image'),
+  },
+  async (args) => {
+    // Validate path is under /workspace/group/ to prevent path traversal
+    const resolved = path.resolve(args.file_path);
+    if (!resolved.startsWith('/workspace/group/')) {
+      return {
+        content: [{ type: 'text' as const, text: 'Error: file_path must be under /workspace/group/' }],
+        isError: true,
+      };
+    }
+
+    // Check file exists
+    if (!fs.existsSync(resolved)) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: file not found: ${resolved}` }],
+        isError: true,
+      };
+    }
+
+    const data: Record<string, string | undefined> = {
+      type: 'image',
+      chatJid,
+      filePath: resolved,
+      caption: args.caption || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: 'Image sent.' }] };
+  },
+);
+
+server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools.
 

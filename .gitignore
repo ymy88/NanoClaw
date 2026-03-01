@@ -20,7 +20,11 @@ groups/global/*
 
 # Secrets
 *.keys.json
+vertex-service-account.json
 .env
+
+# Local Claude Code settings
+.claude/settings.local.json
 
 # OS
 .DS_Store

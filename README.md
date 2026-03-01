@@ -1,3 +1,17 @@
+# NanoClaw (Fork)
+
+Forked from [qwibitai/nanoclaw](https://github.com/qwibitai/nanoclaw).
+
+## What's New in This Fork
+
+- **Vertex AI support** - Run Claude via Google Vertex AI, or use Vertex AI alongside Anthropic API for image generation
+- **Image generation** - Generate images using Gemini image models via Vertex AI and send them directly to chat (`/generate-image` skill)
+- **Image understanding** - Upload images in Slack and the agent can see and respond to them
+- **Custom personality** - Define your agent's character via a gitignored `PERSONALITY.md` — each installation gets its own persona
+- **Slack channel** - Full Slack integration with image sending support
+
+---
+
 <p align="center">
   <img src="assets/nanoclaw-logo.png" alt="NanoClaw" width="400">
 </p>

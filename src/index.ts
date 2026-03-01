@@ -3,12 +3,15 @@ import path from 'path';
 
 import {
   ASSISTANT_NAME,
+  DATA_DIR,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
+  SLACK_ONLY,
   TRIGGER_PATTERN,
 } from './config.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
+import { SlackChannel } from './channels/slack.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -41,6 +44,7 @@ import { findChannel, formatMessages, formatOutbound } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
+import { readEnvFile } from './env.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -52,6 +56,7 @@ let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
 let whatsapp: WhatsAppChannel;
+let slack: SlackChannel | undefined;
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 
@@ -475,9 +480,23 @@ async function main(): Promise<void> {
   };
 
   // Create and connect channels
-  whatsapp = new WhatsAppChannel(channelOpts);
-  channels.push(whatsapp);
-  await whatsapp.connect();
+  // Check if Slack tokens are configured
+  const slackEnv = readEnvFile(['SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN']);
+  const hasSlackTokens = !!(
+    slackEnv.SLACK_BOT_TOKEN && slackEnv.SLACK_APP_TOKEN
+  );
+
+  if (!SLACK_ONLY) {
+    whatsapp = new WhatsAppChannel(channelOpts);
+    channels.push(whatsapp);
+    await whatsapp.connect();
+  }
+
+  if (hasSlackTokens) {
+    slack = new SlackChannel(channelOpts);
+    channels.push(slack);
+    await slack.connect();
+  }
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({
@@ -502,10 +521,27 @@ async function main(): Promise<void> {
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       return channel.sendMessage(jid, text);
     },
+    sendImage: async (jid, filePath, caption) => {
+      const channel = findChannel(channels, jid);
+      if (!channel) throw new Error(`No channel for JID: ${jid}`);
+      if (channel.sendImage) {
+        await channel.sendImage(jid, filePath, caption);
+      } else {
+        // Fallback: send caption as text if channel doesn't support images
+        if (caption) await channel.sendMessage(jid, caption);
+        logger.warn(
+          { jid, channel: channel.name },
+          'Channel does not support sendImage, caption sent as text',
+        );
+      }
+    },
     registeredGroups: () => registeredGroups,
     registerGroup,
-    syncGroupMetadata: (force) =>
-      whatsapp?.syncGroupMetadata(force) ?? Promise.resolve(),
+    syncGroupMetadata: async (force) => {
+      // Sync metadata across all active channels
+      if (whatsapp) await whatsapp.syncGroupMetadata(force);
+      if (slack) await slack.syncChannelMetadata();
+    },
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) =>
       writeGroupsSnapshot(gf, im, ag, rj),

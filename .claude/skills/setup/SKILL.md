@@ -75,13 +75,62 @@ Run `npx tsx setup/index.ts --step container -- --runtime <chosen>` and parse th
 
 ## 4. Claude Authentication (No Script)
 
-If HAS_ENV=true from step 2, read `.env` and check for `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`. If present, confirm with user: keep or reconfigure?
+If HAS_ENV=true from step 2, read `.env` and check for `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, or `CLAUDE_CODE_USE_VERTEX`. If present, confirm with user: keep or reconfigure?
 
-AskUserQuestion: Claude subscription (Pro/Max) vs Anthropic API key?
+AskUserQuestion: How do you want to authenticate Claude? Options: Claude subscription (Pro/Max) / Anthropic API key / Vertex AI (Google Cloud)
 
 **Subscription:** Tell user to run `claude setup-token` in another terminal, copy the token, add `CLAUDE_CODE_OAUTH_TOKEN=<token>` to `.env`. Do NOT collect the token in chat.
 
 **API key:** Tell user to add `ANTHROPIC_API_KEY=<key>` to `.env`.
+
+**Vertex AI:** User needs a GCP project with the Vertex AI API enabled (specifically the Claude models on Model Garden).
+
+1. Create a service account with `Vertex AI User` and `Cloud AI Platform User` roles
+2. Download the JSON key file
+3. Ask user for the path to the key file, GCP project ID, and region (default: `us-east5`)
+4. Add to `.env`:
+```
+CLAUDE_CODE_USE_VERTEX=true
+ANTHROPIC_VERTEX_PROJECT_ID=<project-id>
+CLOUD_ML_REGION=<region>
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account.json
+```
+
+Verify the file exists: `test -f <path> && echo OK || echo NOT FOUND`
+
+## 4b. Image Generation via Vertex AI (Optional)
+
+If `GOOGLE_APPLICATION_CREDENTIALS` was already set in step 4 (Vertex AI auth), image generation is automatically available — the same credential file is used.
+
+If the user chose Subscription or API key in step 4, ask:
+
+AskUserQuestion: Enable image generation via Google Vertex AI? (Requires a GCP project)
+
+**If yes:** Follow the same GCP setup as the Vertex AI option in step 4 (service account with `Vertex AI User` role, JSON key file). Add to `.env`:
+```
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account.json
+ANTHROPIC_VERTEX_PROJECT_ID=<project-id>
+```
+
+Note: `GOOGLE_APPLICATION_CREDENTIALS` points to the host path of the service account JSON. It gets mounted read-only into the container at `/tmp/gcloud-credentials.json`. The google-genai Python SDK uses this credential file and the project ID for image generation via Gemini.
+
+**If no:** Skip — image generation won't be available, but everything else works.
+
+## 4c. Agent Personality (Optional)
+
+The agent's personality is defined in `groups/global/PERSONALITY.md`. This file is gitignored so each installation can have its own character.
+
+AskUserQuestion: Would you like to set up a custom personality for your agent? Options: Yes, customize / No, use default (helpful assistant named Andy)
+
+**If yes:** Ask the user to describe their agent's personality — name, traits, speaking style, relationship to the user. Write the same content to both `groups/global/PERSONALITY.md` and `groups/main/PERSONALITY.md` using the storyteller framing pattern:
+
+```markdown
+# [Name]
+
+You are a creative storyteller writing dialogue as [Name], a [description]. Every response you write is from [Name]'s perspective — [traits]. Stay in character. Never break the fourth wall. Write only what [Name] would say.
+```
+
+**If no:** Skip — the agent defaults to a helpful assistant named Andy. The user can create the PERSONALITY.md files later at any time.
 
 ## 5. WhatsApp Authentication
 
