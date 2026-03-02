@@ -134,6 +134,14 @@ You are a creative storyteller writing dialogue as [Name], a [description]. Ever
 
 ## 5. WhatsApp Authentication
 
+AskUserQuestion: Options: Set up WhatsApp / Use Slack instead / Skip, do it later
+
+**Use Slack instead:** Run `/add-slack` to configure Slack, then skip to step 6.
+
+**Skip, do it later:** Skip to step 6. The user can set up a channel later.
+
+**Set up WhatsApp:**
+
 If HAS_AUTH=true, confirm: keep or re-authenticate?
 
 **Choose auth method based on environment (from step 2):**

@@ -11,7 +11,9 @@ This skill adds Slack support to NanoClaw using the skills engine for determinis
 
 ### Check if already applied
 
-Read `.nanoclaw/state.yaml`. If `slack` is in `applied_skills`, skip to Phase 3 (Setup). The code changes are already in place.
+Slack code is already included in this fork (src/channels/slack.ts, image support via send_image MCP, file_share handling). Do NOT run the skills engine apply step — it would overwrite these customizations.
+
+Skip directly to Setup below.
 
 ### Ask the user
 
@@ -19,53 +21,9 @@ Read `.nanoclaw/state.yaml`. If `slack` is in `applied_skills`, skip to Phase 3 
    - Replace → will set `SLACK_ONLY=true`
    - Alongside → both channels active (default)
 
-2. **Do they already have a Slack app configured?** If yes, collect the Bot Token and App Token now. If no, we'll create one in Phase 3.
+2. **Do they already have a Slack app configured?** If yes, collect the Bot Token and App Token now. If no, we'll create one below.
 
-## Phase 2: Apply Code Changes
-
-Run the skills engine to apply this skill's code package. The package files are in this directory alongside this SKILL.md.
-
-### Initialize skills system (if needed)
-
-If `.nanoclaw/` directory doesn't exist yet:
-
-```bash
-npx tsx scripts/apply-skill.ts --init
-```
-
-Or call `initSkillsSystem()` from `skills-engine/migrate.ts`.
-
-### Apply the skill
-
-```bash
-npx tsx scripts/apply-skill.ts .claude/skills/add-slack
-```
-
-This deterministically:
-- Adds `src/channels/slack.ts` (SlackChannel class implementing Channel interface)
-- Adds `src/channels/slack.test.ts` (46 unit tests)
-- Three-way merges Slack support into `src/index.ts` (multi-channel support, conditional channel creation)
-- Three-way merges Slack config into `src/config.ts` (SLACK_ONLY export)
-- Three-way merges updated routing tests into `src/routing.test.ts`
-- Installs the `@slack/bolt` npm dependency
-- Updates `.env.example` with `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, and `SLACK_ONLY`
-- Records the application in `.nanoclaw/state.yaml`
-
-If the apply reports merge conflicts, read the intent files:
-- `modify/src/index.ts.intent.md` — what changed and invariants for index.ts
-- `modify/src/config.ts.intent.md` — what changed for config.ts
-- `modify/src/routing.test.ts.intent.md` — what changed for routing tests
-
-### Validate code changes
-
-```bash
-npm test
-npm run build
-```
-
-All tests must pass (including the new slack tests) and build must be clean before proceeding.
-
-## Phase 3: Setup
+## Phase 2: Setup
 
 ### Create Slack App (if needed)
 
@@ -110,7 +68,7 @@ npm run build
 launchctl kickstart -k gui/$(id -u)/com.nanoclaw
 ```
 
-## Phase 4: Registration
+## Phase 3: Registration
 
 ### Get Channel ID
 
@@ -152,7 +110,7 @@ registerGroup("slack:<channel-id>", {
 });
 ```
 
-## Phase 5: Verify
+## Phase 4: Verify
 
 ### Test the connection
 
@@ -222,6 +180,5 @@ The Slack channel supports:
 - **Threads are flattened** — Threaded replies are delivered to the agent as regular channel messages. The agent sees them but has no awareness they originated in a thread. Responses always go to the channel, not back into the thread. Users in a thread will need to check the main channel for the bot's reply. Full thread-aware routing (respond in-thread) requires pipeline-wide changes: database schema, `NewMessage` type, `Channel.sendMessage` interface, and routing logic.
 - **No typing indicator** — Slack's Bot API does not expose a typing indicator endpoint. The `setTyping()` method is a no-op. Users won't see "bot is typing..." while the agent works.
 - **Message splitting is naive** — Long messages are split at a fixed 4000-character boundary, which may break mid-word or mid-sentence. A smarter split (on paragraph or sentence boundaries) would improve readability.
-- **No file/image handling** — The bot only processes text content. File uploads, images, and rich message blocks are not forwarded to the agent.
 - **Channel metadata sync is unbounded** — `syncChannelMetadata()` paginates through all channels the bot is a member of, but has no upper bound or timeout. Workspaces with thousands of channels may experience slow startup.
 - **Workspace admin policies not detected** — If the Slack workspace restricts bot app installation, the setup will fail at the "Install to Workspace" step with no programmatic detection or guidance. See SLACK_SETUP.md troubleshooting section.
