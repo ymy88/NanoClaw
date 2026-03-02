@@ -99,16 +99,22 @@ export async function run(_args: string[]): Promise<void> {
   const envFile = path.join(projectRoot, '.env');
   if (fs.existsSync(envFile)) {
     const envContent = fs.readFileSync(envFile, 'utf-8');
-    if (/^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=/m.test(envContent)) {
+    if (/^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|CLAUDE_CODE_USE_VERTEX)=/m.test(envContent)) {
       credentials = 'configured';
     }
   }
 
-  // 4. Check WhatsApp auth
-  let whatsappAuth = 'not_found';
+  // 4. Check channel auth (WhatsApp or Slack)
+  let channelAuth = 'not_found';
   const authDir = path.join(projectRoot, 'store', 'auth');
   if (fs.existsSync(authDir) && fs.readdirSync(authDir).length > 0) {
-    whatsappAuth = 'authenticated';
+    channelAuth = 'authenticated';
+  }
+  if (channelAuth === 'not_found' && fs.existsSync(envFile)) {
+    const envContent = fs.readFileSync(envFile, 'utf-8');
+    if (/^SLACK_BOT_TOKEN=/m.test(envContent) && /^SLACK_APP_TOKEN=/m.test(envContent)) {
+      channelAuth = 'authenticated';
+    }
   }
 
   // 5. Check registered groups (using better-sqlite3, not sqlite3 CLI)
@@ -141,7 +147,7 @@ export async function run(_args: string[]): Promise<void> {
   const status =
     service === 'running' &&
     credentials !== 'missing' &&
-    whatsappAuth !== 'not_found' &&
+    channelAuth !== 'not_found' &&
     registeredGroups > 0
       ? 'success'
       : 'failed';
@@ -152,7 +158,7 @@ export async function run(_args: string[]): Promise<void> {
     SERVICE: service,
     CONTAINER_RUNTIME: containerRuntime,
     CREDENTIALS: credentials,
-    WHATSAPP_AUTH: whatsappAuth,
+    CHANNEL_AUTH: channelAuth,
     REGISTERED_GROUPS: registeredGroups,
     MOUNT_ALLOWLIST: mountAllowlist,
     STATUS: status,
