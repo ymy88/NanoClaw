@@ -50,9 +50,10 @@ launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
 launchctl kickstart -k gui/$(id -u)/com.nanoclaw  # restart
 
 # Linux (systemd)
-systemctl --user start nanoclaw
-systemctl --user stop nanoclaw
-systemctl --user restart nanoclaw
+systemctl --user start --no-block nanoclaw
+systemctl --user stop --no-block nanoclaw
+systemctl --user restart --no-block nanoclaw
+sleep 2 && systemctl --user status nanoclaw   # check status after start/restart
 ```
 
 ## Container Build Cache
