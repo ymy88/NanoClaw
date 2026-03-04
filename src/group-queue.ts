@@ -142,6 +142,7 @@ export class GroupQueue {
   notifyIdle(groupJid: string): void {
     const state = this.getGroup(groupJid);
     state.idleWaiting = true;
+    logger.debug({ groupJid, pendingTasks: state.pendingTasks.length }, 'Container notified idle');
     if (state.pendingTasks.length > 0) {
       this.closeStdin(groupJid);
     }
@@ -153,8 +154,13 @@ export class GroupQueue {
    */
   sendMessage(groupJid: string, text: string): boolean {
     const state = this.getGroup(groupJid);
-    if (!state.active || !state.groupFolder || state.isTaskContainer)
+    if (!state.active || !state.groupFolder || state.isTaskContainer) {
+      logger.debug(
+        { groupJid, active: state.active, groupFolder: state.groupFolder, isTaskContainer: state.isTaskContainer },
+        'Host→Container: sendMessage skipped (no active container)',
+      );
       return false;
+    }
     state.idleWaiting = false; // Agent is about to receive work, no longer idle
 
     const inputDir = path.join(DATA_DIR, 'ipc', state.groupFolder, 'input');
@@ -165,6 +171,10 @@ export class GroupQueue {
       const tempPath = `${filepath}.tmp`;
       fs.writeFileSync(tempPath, JSON.stringify({ type: 'message', text }));
       fs.renameSync(tempPath, filepath);
+      logger.info(
+        { groupJid, file: filename, textLength: text.length },
+        'Host→Container: IPC message written',
+      );
       return true;
     } catch {
       return false;
@@ -178,6 +188,7 @@ export class GroupQueue {
     const state = this.getGroup(groupJid);
     if (!state.active || !state.groupFolder) return;
 
+    logger.info({ groupJid }, 'Host→Container: writing _close sentinel');
     const inputDir = path.join(DATA_DIR, 'ipc', state.groupFolder, 'input');
     try {
       fs.mkdirSync(inputDir, { recursive: true });

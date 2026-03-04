@@ -206,9 +206,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
 /**
  * Refresh current_tasks.json for all registered groups after a task mutation.
  */
-function refreshTaskSnapshots(
-  deps: IpcDeps,
-): void {
+function refreshTaskSnapshots(deps: IpcDeps): void {
   const tasks = getAllTasks();
   const formattedTasks = tasks.map((t) => ({
     id: t.id,

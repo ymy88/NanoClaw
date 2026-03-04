@@ -312,6 +312,7 @@ function drainIpcInput(): string[] {
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         fs.unlinkSync(filePath);
         if (data.type === 'message' && data.text) {
+          log(`Container←Host: received IPC message (file=${file}, ${data.text.length} chars)`);
           messages.push(data.text);
         }
       } catch (err) {
@@ -331,14 +332,17 @@ function drainIpcInput(): string[] {
  * Returns the messages as a single string, or null if _close.
  */
 function waitForIpcMessage(): Promise<string | null> {
+  log('Container: waiting for next IPC message...');
   return new Promise((resolve) => {
     const poll = () => {
       if (shouldClose()) {
+        log('Container: _close sentinel found while waiting');
         resolve(null);
         return;
       }
       const messages = drainIpcInput();
       if (messages.length > 0) {
+        log(`Container: received ${messages.length} message(s) while waiting`);
         resolve(messages.join('\n'));
         return;
       }
