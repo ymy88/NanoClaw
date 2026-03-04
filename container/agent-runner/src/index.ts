@@ -427,7 +427,7 @@ async function runQuery(
       allowedTools: [
         'Bash',
         'Read', 'Write', 'Edit', 'Glob', 'Grep',
-        'WebSearch', 'WebFetch',
+        'WebFetch',
         'Task', 'TaskOutput', 'TaskStop',
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',

@@ -126,6 +126,9 @@ function buildVolumeMounts(
             // https://code.claude.com/docs/en/memory#manage-auto-memory
             CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
           },
+          permissions: {
+            deny: ['WebSearch'],
+          },
         },
         null,
         2,
@@ -260,6 +263,12 @@ function buildContainerArgs(
         `${key}=${val.replace(/127\.0\.0\.1|localhost/g, 'host.docker.internal')}`,
       );
     }
+  }
+
+  // Pass env vars that skills need in Bash
+  const braveKey = readEnvFile(['BRAVE_SEARCH_API_KEY']).BRAVE_SEARCH_API_KEY;
+  if (braveKey) {
+    args.push('-e', `BRAVE_SEARCH_API_KEY=${braveKey}`);
   }
 
   for (const mount of mounts) {
