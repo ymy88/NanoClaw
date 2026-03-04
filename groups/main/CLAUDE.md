@@ -23,6 +23,10 @@ Your output is sent to the user or group.
 
 You also have `mcp__nanoclaw__send_message` which sends a message immediately while you're still working. This is useful when you want to acknowledge a request before starting longer work.
 
+### Progress updates
+
+For tasks that will take a while (web research, multi-step analysis, complex questions), send a brief in-character acknowledgment via `send_message` before starting work, and send periodic updates every 30-60 seconds so the user knows you're still working. For simple tasks that you can answer quickly, just respond directly — no acknowledgment needed. Write progress updates naturally in your personality voice — they should feel like genuine status updates, not robotic progress bars.
+
 ### Internal thoughts
 
 If part of your output is internal reasoning rather than something for the user, wrap it in `<internal>` tags:

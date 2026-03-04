@@ -1,7 +1,10 @@
+import fs from 'fs';
+import path from 'path';
+
 import { App, LogLevel } from '@slack/bolt';
 import type { GenericMessageEvent, BotMessageEvent } from '@slack/types';
 
-import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
+import { ASSISTANT_NAME, TRIGGER_PATTERN, GROUPS_DIR } from '../config.js';
 import { updateChatName } from '../db.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
@@ -31,6 +34,7 @@ export class SlackChannel implements Channel {
   name = 'slack';
 
   private app: App;
+  private botToken: string;
   private botUserId: string | undefined;
   private connected = false;
   private outgoingQueue: Array<{ jid: string; text: string }> = [];
@@ -53,6 +57,8 @@ export class SlackChannel implements Channel {
         'SLACK_BOT_TOKEN and SLACK_APP_TOKEN must be set in .env',
       );
     }
+
+    this.botToken = botToken;
 
     this.app = new App({
       token: botToken,
@@ -111,10 +117,11 @@ export class SlackChannel implements Channel {
       // (e.g., ^@<ASSISTANT_NAME>\b), so we prepend the trigger when the bot is @mentioned.
       let content = msg.text;
 
-      // Append file URLs so the agent can see shared images/files
+      // Download shared files and pass local paths to the agent
       const files = (
         msg as {
           files?: Array<{
+            url_private_download?: string;
             url_private?: string;
             name?: string;
             mimetype?: string;
@@ -122,14 +129,25 @@ export class SlackChannel implements Channel {
         }
       ).files;
       if (files?.length) {
-        const fileLines = files
-          .filter((f) => f.url_private)
-          .map(
-            (f) =>
-              `[file: ${f.name || 'unknown'} (${f.mimetype || 'unknown'}): ${f.url_private}]`,
-          );
-        if (fileLines.length) {
-          content = (content || '') + '\n' + fileLines.join('\n');
+        const group = groups[jid];
+        const fileLines = await Promise.all(
+          files
+            .filter((f) => f.url_private_download || f.url_private)
+            .map(async (f) => {
+              const localPath = await this.downloadFile(
+                (f.url_private_download || f.url_private)!,
+                f.name || 'file',
+                group.folder,
+              );
+              if (localPath) {
+                return `[file: ${f.name || 'unknown'} (${f.mimetype || 'unknown'}): ${localPath}]`;
+              }
+              return null;
+            }),
+        );
+        const validLines = fileLines.filter(Boolean);
+        if (validLines.length) {
+          content = (content || '') + '\n' + validLines.join('\n');
         }
       }
 
@@ -286,6 +304,42 @@ export class SlackChannel implements Channel {
       logger.info({ count }, 'Slack channel metadata synced');
     } catch (err) {
       logger.error({ err }, 'Failed to sync Slack channel metadata');
+    }
+  }
+
+  /**
+   * Download a Slack file using the bot token and save it to the group's
+   * downloads folder. Returns the container-local path (/workspace/group/downloads/...).
+   */
+  private async downloadFile(
+    url: string,
+    filename: string,
+    groupFolder: string,
+  ): Promise<string | null> {
+    try {
+      const downloadDir = path.join(GROUPS_DIR, groupFolder, 'downloads');
+      fs.mkdirSync(downloadDir, { recursive: true });
+
+      // Prefix with timestamp to avoid collisions
+      const safeFilename = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const hostPath = path.join(downloadDir, safeFilename);
+
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${this.botToken}` },
+      });
+      if (!res.ok) {
+        logger.error({ url, status: res.status }, 'Failed to download Slack file');
+        return null;
+      }
+
+      const buffer = Buffer.from(await res.arrayBuffer());
+      fs.writeFileSync(hostPath, buffer);
+
+      logger.info({ filename, hostPath }, 'Slack file downloaded');
+      return `/workspace/group/downloads/${safeFilename}`;
+    } catch (err) {
+      logger.error({ url, filename, err }, 'Failed to download Slack file');
+      return null;
     }
   }
 
