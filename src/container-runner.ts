@@ -116,6 +116,9 @@ function buildVolumeMounts(
       JSON.stringify(
         {
           env: {
+            // Model selection
+            ANTHROPIC_MODEL: 'claude-opus-4-6',
+            CLAUDE_CODE_SUBAGENT_MODEL: 'claude-opus-4-6',
             // Enable agent swarms (subagent orchestration)
             // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
             CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
@@ -265,7 +268,8 @@ function buildContainerArgs(
     }
   }
 
-  // Pass env vars that skills need in Bash
+  // The below environment variables need to reach Bash tools inside the container,
+  // so they have to be at OS level
   const braveKey = readEnvFile(['BRAVE_SEARCH_API_KEY']).BRAVE_SEARCH_API_KEY;
   if (braveKey) {
     args.push('-e', `BRAVE_SEARCH_API_KEY=${braveKey}`);

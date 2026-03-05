@@ -469,7 +469,8 @@ async function runQuery(
 
     if (message.type === 'system' && message.subtype === 'init') {
       newSessionId = message.session_id;
-      log(`Session initialized: ${newSessionId}`);
+      const initMsg = message as Record<string, unknown>;
+      log(`Session initialized: ${newSessionId} model=${initMsg.model ?? 'unknown'}`);
     }
 
     if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
