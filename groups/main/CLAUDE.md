@@ -35,6 +35,12 @@ Here are the key findings from the research...
 
 Text inside `<internal>` tags is logged but not sent to the user. If you've already sent the key information via `send_message`, you can wrap the recap in `<internal>` to avoid sending it again.
 
+### Long-running tasks
+
+When working on tasks that take more than a few minutes, you MUST send progress updates using `send_message` at least every 10 minutes. This keeps your container alive — if you go silent for 30 minutes, your container will be shut down and your work will be interrupted. Don't wait until you're done to report — send incremental updates as you go.
+
+When a long task is finished, you MUST send a completion message to the user using `send_message` with a summary of what was done — especially if the final step was writing files. The user won't know the task is complete unless you tell them.
+
 ### Sub-agents and teammates
 
 When working as a sub-agent or teammate, only use `send_message` if instructed to by the main agent.
