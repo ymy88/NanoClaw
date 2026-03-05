@@ -142,7 +142,10 @@ export class GroupQueue {
   notifyIdle(groupJid: string): void {
     const state = this.getGroup(groupJid);
     state.idleWaiting = true;
-    logger.debug({ groupJid, pendingTasks: state.pendingTasks.length }, 'Container notified idle');
+    logger.debug(
+      { groupJid, pendingTasks: state.pendingTasks.length },
+      'Container notified idle',
+    );
     if (state.pendingTasks.length > 0) {
       this.closeStdin(groupJid);
     }
@@ -156,7 +159,12 @@ export class GroupQueue {
     const state = this.getGroup(groupJid);
     if (!state.active || !state.groupFolder || state.isTaskContainer) {
       logger.debug(
-        { groupJid, active: state.active, groupFolder: state.groupFolder, isTaskContainer: state.isTaskContainer },
+        {
+          groupJid,
+          active: state.active,
+          groupFolder: state.groupFolder,
+          isTaskContainer: state.isTaskContainer,
+        },
         'Host→Container: sendMessage skipped (no active container)',
       );
       return false;

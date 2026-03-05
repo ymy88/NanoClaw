@@ -328,7 +328,10 @@ export class SlackChannel implements Channel {
         headers: { Authorization: `Bearer ${this.botToken}` },
       });
       if (!res.ok) {
-        logger.error({ url, status: res.status }, 'Failed to download Slack file');
+        logger.error(
+          { url, status: res.status },
+          'Failed to download Slack file',
+        );
         return null;
       }
 
