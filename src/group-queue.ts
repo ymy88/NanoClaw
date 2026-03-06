@@ -129,11 +129,7 @@ export class GroupQueue {
     );
   }
 
-  enqueueTask(
-    queueKey: string,
-    taskId: string,
-    fn: () => Promise<void>,
-  ): void {
+  enqueueTask(queueKey: string, taskId: string, fn: () => Promise<void>): void {
     if (this.shuttingDown) return;
 
     const state = this.getGroup(queueKey);

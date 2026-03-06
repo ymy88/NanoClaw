@@ -138,11 +138,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     isMain ||
                     (targetGroup && targetGroup.folder === sourceGroup)
                   ) {
-                    await deps.sendMessage(
-                      data.chatJid,
-                      data.text,
-                      msgOptions,
-                    );
+                    await deps.sendMessage(data.chatJid, data.text, msgOptions);
                     logger.info(
                       { chatJid: data.chatJid, sourceGroup },
                       'IPC message sent',

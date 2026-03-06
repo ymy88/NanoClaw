@@ -297,9 +297,7 @@ async function runAgent(
 ): Promise<'success' | 'error'> {
   const isMain = group.folder === MAIN_GROUP_FOLDER;
   // Sessions are keyed by "folder:threadKey" for threads, "folder" for non-threaded
-  const sessionKey = threadKey
-    ? `${group.folder}:${threadKey}`
-    : group.folder;
+  const sessionKey = threadKey ? `${group.folder}:${threadKey}` : group.folder;
   const sessionId = sessions[sessionKey];
   const queueKey = makeQueueKey(chatJid, threadKey);
 
