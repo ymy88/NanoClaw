@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
-import { GroupQueue } from './group-queue.js';
+import { GroupQueue, makeQueueKey, parseQueueKey } from './group-queue.js';
 
 // Mock config to control concurrency limit
 vi.mock('./config.js', () => ({
@@ -445,5 +445,55 @@ describe('GroupQueue', () => {
 
     resolveProcess!();
     await vi.advanceTimersByTimeAsync(10);
+  });
+});
+
+// --- Queue key helpers ---
+
+describe('makeQueueKey / parseQueueKey', () => {
+  it('creates key without thread', () => {
+    expect(makeQueueKey('slack:C0123456789')).toBe('slack:C0123456789');
+  });
+
+  it('creates key with thread', () => {
+    expect(makeQueueKey('slack:C0123456789', '1772771784-037519')).toBe(
+      'slack:C0123456789:1772771784-037519',
+    );
+  });
+
+  it('creates key with null thread', () => {
+    expect(makeQueueKey('slack:C0123456789', null)).toBe('slack:C0123456789');
+  });
+
+  it('parses Slack key without thread', () => {
+    const { chatJid, threadKey } = parseQueueKey('slack:C0123456789');
+    expect(chatJid).toBe('slack:C0123456789');
+    expect(threadKey).toBeNull();
+  });
+
+  it('parses Slack key with thread', () => {
+    const { chatJid, threadKey } = parseQueueKey(
+      'slack:C0123456789:1772771784-037519',
+    );
+    expect(chatJid).toBe('slack:C0123456789');
+    expect(threadKey).toBe('1772771784-037519');
+  });
+
+  it('parses WhatsApp key without thread', () => {
+    const { chatJid, threadKey } = parseQueueKey('12345@g.us');
+    expect(chatJid).toBe('12345@g.us');
+    expect(threadKey).toBeNull();
+  });
+
+  it('round-trips Slack key with thread', () => {
+    const original = makeQueueKey('slack:C0123456789', '1772771784-037519');
+    const { chatJid, threadKey } = parseQueueKey(original);
+    expect(makeQueueKey(chatJid, threadKey)).toBe(original);
+  });
+
+  it('round-trips Slack key without thread', () => {
+    const original = makeQueueKey('slack:C0123456789');
+    const { chatJid, threadKey } = parseQueueKey(original);
+    expect(makeQueueKey(chatJid, threadKey)).toBe(original);
   });
 });

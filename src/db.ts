@@ -407,6 +407,31 @@ export function getMessagesSinceForThread(
     .all(chatJid, sinceTimestamp, `${botPrefix}:%`, threadTs) as NewMessage[];
 }
 
+/**
+ * Get the most recent N messages from a channel (all threads combined).
+ * Used to provide channel context when spawning a new thread container.
+ */
+export function getRecentMessages(
+  chatJid: string,
+  limit: number,
+  botPrefix: string,
+): NewMessage[] {
+  const sql = `
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, thread_ts AS threadTs
+    FROM messages
+    WHERE chat_jid = ?
+      AND is_bot_message = 0 AND content NOT LIKE ?
+      AND content != '' AND content IS NOT NULL
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `;
+  const rows = db
+    .prepare(sql)
+    .all(chatJid, `${botPrefix}:%`, limit) as NewMessage[];
+  // Reverse so messages are in chronological order
+  return rows.reverse();
+}
+
 export function createTask(
   task: Omit<ScheduledTask, 'last_run' | 'last_result'>,
 ): void {

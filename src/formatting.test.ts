@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from './config.js';
 import {
   escapeXml,
+  formatChannelContext,
   formatMessages,
   formatOutbound,
   stripInternalTags,
@@ -233,5 +234,54 @@ describe('trigger gating (requiresTrigger interaction)', () => {
   it('non-main group with requiresTrigger=false always processes (no trigger needed)', () => {
     const msgs = [makeMsg({ content: 'hello no trigger' })];
     expect(shouldProcess(false, false, msgs)).toBe(true);
+  });
+});
+
+// --- formatChannelContext ---
+
+describe('formatChannelContext', () => {
+  it('returns empty string for empty array', () => {
+    expect(formatChannelContext([])).toBe('');
+  });
+
+  it('wraps messages in <channel_context> tags', () => {
+    const msgs = [makeMsg({ sender_name: 'Alice', content: 'hello' })];
+    const result = formatChannelContext(msgs);
+    expect(result).toContain('<channel_context>');
+    expect(result).toContain('</channel_context>');
+    expect(result).toContain('Alice');
+    expect(result).toContain('hello');
+  });
+
+  it('formats multiple messages in order', () => {
+    const msgs = [
+      makeMsg({
+        sender_name: 'Alice',
+        content: 'first',
+        timestamp: '2024-01-01T00:00:01.000Z',
+      }),
+      makeMsg({
+        sender_name: 'Bob',
+        content: 'second',
+        timestamp: '2024-01-01T00:00:02.000Z',
+      }),
+    ];
+    const result = formatChannelContext(msgs);
+    const aliceIdx = result.indexOf('Alice');
+    const bobIdx = result.indexOf('Bob');
+    expect(aliceIdx).toBeLessThan(bobIdx);
+  });
+
+  it('escapes XML in content', () => {
+    const msgs = [makeMsg({ content: '<script>alert("xss")</script>' })];
+    const result = formatChannelContext(msgs);
+    expect(result).not.toContain('<script>');
+    expect(result).toContain('&lt;script&gt;');
+  });
+
+  it('ends with double newline for prompt concatenation', () => {
+    const msgs = [makeMsg()];
+    const result = formatChannelContext(msgs);
+    expect(result).toMatch(/\n\n$/);
   });
 });

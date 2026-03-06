@@ -17,6 +17,19 @@ export function formatMessages(messages: NewMessage[]): string {
   return `<messages>\n${lines.join('\n')}\n</messages>`;
 }
 
+/**
+ * Format recent channel messages as context for a thread container.
+ * Gives the agent awareness of what's been discussed in the channel.
+ */
+export function formatChannelContext(messages: NewMessage[]): string {
+  if (messages.length === 0) return '';
+  const lines = messages.map(
+    (m) =>
+      `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${escapeXml(m.content)}</message>`,
+  );
+  return `<channel_context>\n${lines.join('\n')}\n</channel_context>\n\n`;
+}
+
 export function stripInternalTags(text: string): string {
   return text.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
 }

@@ -30,6 +30,7 @@ import {
   getMessagesSince,
   getMessagesSinceForThread,
   getNewMessages,
+  getRecentMessages,
   getRouterState,
   initDatabase,
   setRegisteredGroup,
@@ -45,7 +46,12 @@ import {
   unsanitizeThreadKey,
 } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { findChannel, formatMessages, formatOutbound } from './router.js';
+import {
+  findChannel,
+  formatChannelContext,
+  formatMessages,
+  formatOutbound,
+} from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import {
   Channel,
@@ -180,7 +186,25 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
     if (!hasTrigger) return true;
   }
 
-  const prompt = formatMessages(missedMessages);
+  // For threaded messages, prepend recent channel history as context
+  // so the agent knows what's been discussed in the channel.
+  // Cap to messages since the last bot mention (last conversation turn).
+  let channelContext = '';
+  if (threadKey) {
+    const recentMessages = getRecentMessages(chatJid, 50, ASSISTANT_NAME);
+    // Find the last bot mention (skipping the current trigger) and start after it
+    let startIdx = 0;
+    for (let i = recentMessages.length - 2; i >= 0; i--) {
+      if (TRIGGER_PATTERN.test(recentMessages[i].content.trim())) {
+        startIdx = i + 1;
+        break;
+      }
+    }
+    const contextMessages = recentMessages.slice(startIdx);
+    channelContext = formatChannelContext(contextMessages);
+  }
+
+  const prompt = channelContext + formatMessages(missedMessages);
 
   // Compute reply thread ts from threadKey for Slack thread replies
   const replyThreadTs = threadKey ? unsanitizeThreadKey(threadKey) : undefined;

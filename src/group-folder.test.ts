@@ -6,6 +6,9 @@ import {
   isValidGroupFolder,
   resolveGroupFolderPath,
   resolveGroupIpcPath,
+  sanitizeThreadKey,
+  unsanitizeThreadKey,
+  resolveThreadIpcPath,
 } from './group-folder.js';
 
 describe('group folder validation', () => {
@@ -39,5 +42,35 @@ describe('group folder validation', () => {
   it('throws for unsafe folder names', () => {
     expect(() => resolveGroupFolderPath('../../etc')).toThrow();
     expect(() => resolveGroupIpcPath('/tmp')).toThrow();
+  });
+});
+
+describe('thread key helpers', () => {
+  it('sanitizeThreadKey replaces dots with dashes', () => {
+    expect(sanitizeThreadKey('1772771784.037519')).toBe('1772771784-037519');
+  });
+
+  it('sanitizeThreadKey handles multiple dots', () => {
+    expect(sanitizeThreadKey('a.b.c')).toBe('a-b-c');
+  });
+
+  it('unsanitizeThreadKey restores the last dash to a dot', () => {
+    expect(unsanitizeThreadKey('1772771784-037519')).toBe('1772771784.037519');
+  });
+
+  it('sanitize and unsanitize round-trip correctly', () => {
+    const ts = '1772771784.037519';
+    expect(unsanitizeThreadKey(sanitizeThreadKey(ts))).toBe(ts);
+  });
+
+  it('resolveThreadIpcPath without threadKey returns group-level path', () => {
+    const result = resolveThreadIpcPath('main');
+    expect(result).toEqual(resolveGroupIpcPath('main'));
+  });
+
+  it('resolveThreadIpcPath with threadKey appends thread subdirectory', () => {
+    const result = resolveThreadIpcPath('main', '1772771784-037519');
+    const groupPath = resolveGroupIpcPath('main');
+    expect(result).toBe(path.resolve(groupPath, '1772771784-037519'));
   });
 });

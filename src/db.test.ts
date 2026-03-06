@@ -6,8 +6,12 @@ import {
   deleteTask,
   getAllChats,
   getMessagesSince,
+  getMessagesSinceForThread,
   getNewMessages,
+  getRecentMessages,
+  getSession,
   getTaskById,
+  setSession,
   storeChatMetadata,
   storeMessage,
   updateTask,
@@ -386,5 +390,183 @@ describe('task CRUD', () => {
 
     deleteTask('task-3');
     expect(getTaskById('task-3')).toBeUndefined();
+  });
+});
+
+// --- getRecentMessages ---
+
+describe('getRecentMessages', () => {
+  beforeEach(() => {
+    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+    for (let i = 1; i <= 10; i++) {
+      store({
+        id: `r${i}`,
+        chat_jid: 'group@g.us',
+        sender: 'user@s.whatsapp.net',
+        sender_name: 'User',
+        content: `message ${i}`,
+        timestamp: `2024-01-01T00:00:${String(i).padStart(2, '0')}.000Z`,
+      });
+    }
+  });
+
+  it('returns the last N messages in chronological order', () => {
+    const msgs = getRecentMessages('group@g.us', 3, 'Andy');
+    expect(msgs).toHaveLength(3);
+    expect(msgs[0].content).toBe('message 8');
+    expect(msgs[1].content).toBe('message 9');
+    expect(msgs[2].content).toBe('message 10');
+  });
+
+  it('returns all messages when limit exceeds total', () => {
+    const msgs = getRecentMessages('group@g.us', 100, 'Andy');
+    expect(msgs).toHaveLength(10);
+    expect(msgs[0].content).toBe('message 1');
+  });
+
+  it('excludes bot messages', () => {
+    storeMessage({
+      id: 'bot1',
+      chat_jid: 'group@g.us',
+      sender: 'bot',
+      sender_name: 'Bot',
+      content: 'bot reply',
+      timestamp: '2024-01-01T00:00:11.000Z',
+      is_bot_message: true,
+    });
+    const msgs = getRecentMessages('group@g.us', 100, 'Andy');
+    expect(msgs.every((m) => m.content !== 'bot reply')).toBe(true);
+  });
+
+  it('returns messages from all threads', () => {
+    storeMessage({
+      id: 'thread1',
+      chat_jid: 'group@g.us',
+      sender: 'user@s.whatsapp.net',
+      sender_name: 'User',
+      content: 'threaded message',
+      timestamp: '2024-01-01T00:00:11.000Z',
+      threadTs: '1704067200.000000',
+    });
+    const msgs = getRecentMessages('group@g.us', 100, 'Andy');
+    expect(msgs.some((m) => m.content === 'threaded message')).toBe(true);
+  });
+});
+
+// --- getMessagesSinceForThread ---
+
+describe('getMessagesSinceForThread', () => {
+  beforeEach(() => {
+    storeChatMetadata('group@g.us', '2024-01-01T00:00:00.000Z');
+
+    // Channel-level message
+    store({
+      id: 'ch1',
+      chat_jid: 'group@g.us',
+      sender: 'user@s.whatsapp.net',
+      sender_name: 'User',
+      content: 'channel message',
+      timestamp: '2024-01-01T00:00:01.000Z',
+    });
+
+    // Thread A messages
+    storeMessage({
+      id: 'ta1',
+      chat_jid: 'group@g.us',
+      sender: 'user@s.whatsapp.net',
+      sender_name: 'User',
+      content: 'thread A msg 1',
+      timestamp: '2024-01-01T00:00:02.000Z',
+      threadTs: '1704067200.000000',
+    });
+    storeMessage({
+      id: 'ta2',
+      chat_jid: 'group@g.us',
+      sender: 'user@s.whatsapp.net',
+      sender_name: 'User',
+      content: 'thread A msg 2',
+      timestamp: '2024-01-01T00:00:03.000Z',
+      threadTs: '1704067200.000000',
+    });
+
+    // Thread B message
+    storeMessage({
+      id: 'tb1',
+      chat_jid: 'group@g.us',
+      sender: 'user@s.whatsapp.net',
+      sender_name: 'User',
+      content: 'thread B msg 1',
+      timestamp: '2024-01-01T00:00:04.000Z',
+      threadTs: '1704067201.000000',
+    });
+  });
+
+  it('returns only messages from the specified thread', () => {
+    const msgs = getMessagesSinceForThread(
+      'group@g.us',
+      '',
+      'Andy',
+      '1704067200.000000',
+    );
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0].content).toBe('thread A msg 1');
+    expect(msgs[1].content).toBe('thread A msg 2');
+  });
+
+  it('does not include channel-level or other thread messages', () => {
+    const msgs = getMessagesSinceForThread(
+      'group@g.us',
+      '',
+      'Andy',
+      '1704067200.000000',
+    );
+    expect(msgs.every((m) => m.content.startsWith('thread A'))).toBe(true);
+  });
+
+  it('respects sinceTimestamp', () => {
+    const msgs = getMessagesSinceForThread(
+      'group@g.us',
+      '2024-01-01T00:00:02.000Z',
+      'Andy',
+      '1704067200.000000',
+    );
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].content).toBe('thread A msg 2');
+  });
+
+  it('returns empty for unknown thread', () => {
+    const msgs = getMessagesSinceForThread(
+      'group@g.us',
+      '',
+      'Andy',
+      '9999999999.000000',
+    );
+    expect(msgs).toHaveLength(0);
+  });
+});
+
+// --- Sessions with thread key ---
+
+describe('sessions with thread key', () => {
+  it('stores and retrieves session without thread key', () => {
+    setSession('main', 'session-1');
+    expect(getSession('main')).toBe('session-1');
+  });
+
+  it('stores and retrieves session with thread key', () => {
+    setSession('main', 'session-thread', '1772771784-037519');
+    expect(getSession('main', '1772771784-037519')).toBe('session-thread');
+  });
+
+  it('keeps thread and non-thread sessions separate', () => {
+    setSession('main', 'session-channel');
+    setSession('main', 'session-thread', '1772771784-037519');
+    expect(getSession('main')).toBe('session-channel');
+    expect(getSession('main', '1772771784-037519')).toBe('session-thread');
+  });
+
+  it('returns undefined for non-existent thread session', () => {
+    setSession('main', 'session-1');
+    expect(getSession('main', 'nonexistent')).toBeUndefined();
   });
 });
