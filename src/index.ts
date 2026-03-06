@@ -493,7 +493,22 @@ async function main(): Promise<void> {
   }
 
   if (hasSlackTokens) {
-    slack = new SlackChannel(channelOpts);
+    slack = new SlackChannel({
+      ...channelOpts,
+      onAutoRegister: (jid, channelName, _channelId) => {
+        const folder = channelName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+        registerGroup(jid, {
+          name: channelName,
+          folder,
+          trigger: `@${ASSISTANT_NAME}`,
+          added_at: new Date().toISOString(),
+          requiresTrigger: true,
+        });
+      },
+    });
     channels.push(slack);
     await slack.connect();
   }

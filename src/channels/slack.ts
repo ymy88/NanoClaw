@@ -28,6 +28,11 @@ export interface SlackChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  onAutoRegister?: (
+    jid: string,
+    channelName: string,
+    channelId: string,
+  ) => void;
 }
 
 export class SlackChannel implements Channel {
@@ -96,9 +101,37 @@ export class SlackChannel implements Channel {
       // Always report metadata for group discovery
       this.opts.onChatMetadata(jid, timestamp, undefined, 'slack', isGroup);
 
-      // Only deliver full messages for registered groups
-      const groups = this.opts.registeredGroups();
-      if (!groups[jid]) return;
+      // Only deliver full messages for registered groups.
+      // If the channel isn't registered yet but onAutoRegister is configured,
+      // register it on first message (fallback for when member_joined_channel
+      // event isn't subscribed or was missed).
+      let groups = this.opts.registeredGroups();
+      if (!groups[jid]) {
+        if (this.opts.onAutoRegister && isGroup) {
+          try {
+            const channelId = msg.channel;
+            const info = await this.app.client.conversations.info({
+              channel: channelId,
+            });
+            const channelName =
+              (info.channel as { name?: string })?.name || channelId;
+            this.opts.onAutoRegister(jid, channelName, channelId);
+            groups = this.opts.registeredGroups();
+            logger.info(
+              { jid, channelName },
+              'Auto-registered Slack channel on first message',
+            );
+          } catch (err) {
+            logger.error(
+              { channel: msg.channel, err },
+              'Failed to auto-register channel on first message',
+            );
+            return;
+          }
+        } else {
+          return;
+        }
+      }
 
       const isBotMessage = !!msg.bot_id || msg.user === this.botUserId;
 

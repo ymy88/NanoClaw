@@ -47,6 +47,9 @@ vi.mock('@slack/bolt', () => ({
           channels: [],
           response_metadata: {},
         }),
+        info: vi.fn().mockResolvedValue({
+          channel: { name: 'new-channel' },
+        }),
       },
       users: {
         info: vi.fn().mockResolvedValue({
@@ -851,6 +854,59 @@ describe('SlackChannel', () => {
     it('has name "slack"', () => {
       const channel = new SlackChannel(createTestOpts());
       expect(channel.name).toBe('slack');
+    });
+  });
+
+  // --- Auto-register ---
+
+  describe('auto-register', () => {
+    it('auto-registers on first message when channel is unregistered', async () => {
+      const onAutoRegister = vi.fn();
+      const registeredGroups = vi.fn()
+        .mockReturnValueOnce({})
+        .mockReturnValue({
+          'slack:C0123456789': {
+            name: 'new-channel',
+            folder: 'new-channel',
+            trigger: '@Jonesy',
+            added_at: '2024-01-01T00:00:00.000Z',
+          },
+        });
+      const opts = createTestOpts({
+        registeredGroups,
+        onAutoRegister,
+      } as any);
+      const channel = new SlackChannel(opts);
+      await channel.connect();
+
+      const event = createMessageEvent({ text: '@Jonesy hello' });
+      await triggerMessageEvent(event);
+
+      expect(onAutoRegister).toHaveBeenCalledWith(
+        'slack:C0123456789',
+        'new-channel',
+        'C0123456789',
+      );
+      expect(opts.onMessage).toHaveBeenCalled();
+    });
+
+    it('does not auto-register DMs on first message', async () => {
+      const onAutoRegister = vi.fn();
+      const opts = createTestOpts({
+        registeredGroups: vi.fn(() => ({})),
+        onAutoRegister,
+      } as any);
+      const channel = new SlackChannel(opts);
+      await channel.connect();
+
+      const event = createMessageEvent({
+        channel: 'D0123456789',
+        channelType: 'im',
+        text: 'Hello',
+      });
+      await triggerMessageEvent(event);
+
+      expect(onAutoRegister).not.toHaveBeenCalled();
     });
   });
 });
