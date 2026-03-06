@@ -862,7 +862,8 @@ describe('SlackChannel', () => {
   describe('auto-register', () => {
     it('auto-registers on first message when channel is unregistered', async () => {
       const onAutoRegister = vi.fn();
-      const registeredGroups = vi.fn()
+      const registeredGroups = vi
+        .fn()
         .mockReturnValueOnce({})
         .mockReturnValue({
           'slack:C0123456789': {

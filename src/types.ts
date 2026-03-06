@@ -39,6 +39,7 @@ export interface RegisteredGroup {
   added_at: string;
   containerConfig?: ContainerConfig;
   requiresTrigger?: boolean; // Default: true for groups, false for solo chats
+  alwaysReplyInThread?: boolean; // Default: true for Slack channels
 }
 
 export interface NewMessage {
@@ -50,6 +51,11 @@ export interface NewMessage {
   timestamp: string;
   is_from_me?: boolean;
   is_bot_message?: boolean;
+  threadTs?: string; // Slack thread_ts (reply target)
+}
+
+export interface SendMessageOptions {
+  threadTs?: string; // Slack thread_ts to reply in a thread
 }
 
 export interface ScheduledTask {
@@ -81,14 +87,23 @@ export interface TaskRunLog {
 export interface Channel {
   name: string;
   connect(): Promise<void>;
-  sendMessage(jid: string, text: string): Promise<void>;
+  sendMessage(
+    jid: string,
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<void>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;
   // Optional: typing indicator. Channels that support it implement it.
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
   // Optional: send an image file. Channels that support it implement it.
-  sendImage?(jid: string, filePath: string, caption?: string): Promise<void>;
+  sendImage?(
+    jid: string,
+    filePath: string,
+    caption?: string,
+    options?: SendMessageOptions,
+  ): Promise<void>;
 }
 
 // Callback type that channels use to deliver inbound messages

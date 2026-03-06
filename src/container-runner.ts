@@ -16,7 +16,11 @@ import {
   TIMEZONE,
 } from './config.js';
 import { readEnvFile } from './env.js';
-import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
+import {
+  resolveGroupFolderPath,
+  resolveGroupIpcPath,
+  resolveThreadIpcPath,
+} from './group-folder.js';
 import { logger } from './logger.js';
 import {
   CONTAINER_RUNTIME_BIN,
@@ -39,6 +43,8 @@ export interface ContainerInput {
   isScheduledTask?: boolean;
   assistantName?: string;
   secrets?: Record<string, string>;
+  replyThreadTs?: string;
+  threadKey?: string;
 }
 
 export interface ContainerOutput {
@@ -57,6 +63,7 @@ interface VolumeMount {
 function buildVolumeMounts(
   group: RegisteredGroup,
   isMain: boolean,
+  threadKey?: string,
 ): VolumeMount[] {
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
@@ -100,14 +107,11 @@ function buildVolumeMounts(
     }
   }
 
-  // Per-group Claude sessions directory (isolated from other groups)
-  // Each group gets their own .claude/ to prevent cross-group session access
-  const groupSessionsDir = path.join(
-    DATA_DIR,
-    'sessions',
-    group.folder,
-    '.claude',
-  );
+  // Per-group (and per-thread) Claude sessions directory
+  // Each group/thread gets their own .claude/ to prevent cross-group/thread session access
+  const groupSessionsDir = threadKey
+    ? path.join(DATA_DIR, 'sessions', group.folder, threadKey, '.claude')
+    : path.join(DATA_DIR, 'sessions', group.folder, '.claude');
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
@@ -156,9 +160,9 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // Per-group IPC namespace: each group gets its own IPC directory
-  // This prevents cross-group privilege escalation via IPC
-  const groupIpcDir = resolveGroupIpcPath(group.folder);
+  // Per-group (and per-thread) IPC namespace
+  // Thread-keyed containers get their own IPC subdirectory
+  const groupIpcDir = resolveThreadIpcPath(group.folder, threadKey);
   fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
@@ -168,21 +172,24 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // Copy agent-runner source into a per-group writable location so agents
+  // Copy agent-runner source into a per-group (per-thread) writable location so agents
   // can customize it (add tools, change behavior) without affecting other
-  // groups. Recompiled on container startup via entrypoint.sh.
+  // groups/threads. Recompiled on container startup via entrypoint.sh.
   const agentRunnerSrc = path.join(
     projectRoot,
     'container',
     'agent-runner',
     'src',
   );
-  const groupAgentRunnerDir = path.join(
-    DATA_DIR,
-    'sessions',
-    group.folder,
-    'agent-runner-src',
-  );
+  const groupAgentRunnerDir = threadKey
+    ? path.join(
+        DATA_DIR,
+        'sessions',
+        group.folder,
+        threadKey,
+        'agent-runner-src',
+      )
+    : path.join(DATA_DIR, 'sessions', group.folder, 'agent-runner-src');
   if (fs.existsSync(agentRunnerSrc)) {
     fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, {
       recursive: true,
@@ -299,7 +306,7 @@ export async function runContainerAgent(
   const groupDir = resolveGroupFolderPath(group.folder);
   fs.mkdirSync(groupDir, { recursive: true });
 
-  const mounts = buildVolumeMounts(group, input.isMain);
+  const mounts = buildVolumeMounts(group, input.isMain, input.threadKey);
 
   // Read secrets and mount Google credentials file before building container
   // args, so the mount is included in the docker run command.
@@ -318,7 +325,10 @@ export async function runContainerAgent(
   }
 
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
-  const containerName = `nanoclaw-${safeName}-${Date.now()}`;
+  const threadSuffix = input.threadKey
+    ? `-${input.threadKey.replace(/[^a-zA-Z0-9-]/g, '-')}`
+    : '';
+  const containerName = `nanoclaw-${safeName}${threadSuffix}-${Date.now()}`;
   const containerArgs = buildContainerArgs(mounts, containerName);
 
   logger.debug(

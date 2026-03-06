@@ -42,3 +42,34 @@ export function resolveGroupIpcPath(folder: string): string {
   ensureWithinBase(ipcBaseDir, ipcPath);
   return ipcPath;
 }
+
+/**
+ * Sanitize a Slack thread_ts for use as a filesystem-safe directory name.
+ * Replaces '.' with '-' (e.g., "1772771784.037519" → "1772771784-037519").
+ */
+export function sanitizeThreadKey(ts: string): string {
+  return ts.replace(/\./g, '-');
+}
+
+/**
+ * Reverse sanitizeThreadKey: convert filesystem-safe key back to Slack ts.
+ * Replaces the last '-' with '.' (Slack ts has exactly one '.').
+ */
+export function unsanitizeThreadKey(key: string): string {
+  const lastDash = key.lastIndexOf('-');
+  if (lastDash === -1) return key;
+  return key.slice(0, lastDash) + '.' + key.slice(lastDash + 1);
+}
+
+/**
+ * Resolve the IPC path for a specific thread within a group.
+ * Without threadKey, returns the group-level IPC path.
+ */
+export function resolveThreadIpcPath(
+  folder: string,
+  threadKey?: string | null,
+): string {
+  const groupIpcPath = resolveGroupIpcPath(folder);
+  if (!threadKey) return groupIpcPath;
+  return path.resolve(groupIpcPath, threadKey);
+}

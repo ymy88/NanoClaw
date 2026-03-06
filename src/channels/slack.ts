@@ -13,6 +13,7 @@ import {
   OnInboundMessage,
   OnChatMetadata,
   RegisteredGroup,
+  SendMessageOptions,
 } from '../types.js';
 
 // Slack's chat.postMessage API limits text to ~4000 characters per call.
@@ -42,7 +43,11 @@ export class SlackChannel implements Channel {
   private botToken: string;
   private botUserId: string | undefined;
   private connected = false;
-  private outgoingQueue: Array<{ jid: string; text: string }> = [];
+  private outgoingQueue: Array<{
+    jid: string;
+    text: string;
+    threadTs?: string;
+  }> = [];
   private flushing = false;
   private userNameCache = new Map<string, string>();
 
@@ -90,11 +95,8 @@ export class SlackChannel implements Channel {
 
       if (!msg.text) return;
 
-      // Threaded replies are flattened into the channel conversation.
-      // The agent sees them alongside channel-level messages; responses
-      // always go to the channel, not back into the thread.
-
       const jid = `slack:${msg.channel}`;
+      const rawThreadTs = (msg as { thread_ts?: string }).thread_ts;
       const timestamp = new Date(parseFloat(msg.ts) * 1000).toISOString();
       const isGroup = msg.channel_type !== 'im';
 
@@ -194,6 +196,23 @@ export class SlackChannel implements Channel {
         }
       }
 
+      // Determine threadTs for the message:
+      // - Thread reply (thread_ts != ts): threadTs = thread_ts (reply to existing thread)
+      // - Channel-level message with alwaysReplyInThread: threadTs = msg.ts (start new thread)
+      // - Otherwise: no threadTs
+      let threadTs: string | undefined;
+      if (rawThreadTs && rawThreadTs !== msg.ts) {
+        // This is a reply in an existing thread
+        threadTs = rawThreadTs;
+      } else if (!rawThreadTs || rawThreadTs === msg.ts) {
+        // Channel-level message (or thread parent, same thing)
+        const group = groups[jid];
+        if (group && group.alwaysReplyInThread !== false) {
+          // Start a new thread under this message
+          threadTs = msg.ts;
+        }
+      }
+
       this.opts.onMessage(jid, {
         id: msg.ts,
         chat_jid: jid,
@@ -203,6 +222,7 @@ export class SlackChannel implements Channel {
         timestamp,
         is_from_me: isBotMessage,
         is_bot_message: isBotMessage,
+        threadTs,
       });
     });
   }
@@ -230,11 +250,16 @@ export class SlackChannel implements Channel {
     await this.syncChannelMetadata();
   }
 
-  async sendMessage(jid: string, text: string): Promise<void> {
+  async sendMessage(
+    jid: string,
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<void> {
     const channelId = jid.replace(/^slack:/, '');
+    const threadTs = options?.threadTs;
 
     if (!this.connected) {
-      this.outgoingQueue.push({ jid, text });
+      this.outgoingQueue.push({ jid, text, threadTs });
       logger.info(
         { jid, queueSize: this.outgoingQueue.length },
         'Slack disconnected, message queued',
@@ -245,18 +270,26 @@ export class SlackChannel implements Channel {
     try {
       // Slack limits messages to ~4000 characters; split if needed
       if (text.length <= MAX_MESSAGE_LENGTH) {
-        await this.app.client.chat.postMessage({ channel: channelId, text });
+        await this.app.client.chat.postMessage({
+          channel: channelId,
+          text,
+          ...(threadTs ? { thread_ts: threadTs } : {}),
+        });
       } else {
         for (let i = 0; i < text.length; i += MAX_MESSAGE_LENGTH) {
           await this.app.client.chat.postMessage({
             channel: channelId,
             text: text.slice(i, i + MAX_MESSAGE_LENGTH),
+            ...(threadTs ? { thread_ts: threadTs } : {}),
           });
         }
       }
-      logger.info({ jid, length: text.length }, 'Slack message sent');
+      logger.info(
+        { jid, length: text.length, threadTs },
+        'Slack message sent',
+      );
     } catch (err) {
-      this.outgoingQueue.push({ jid, text });
+      this.outgoingQueue.push({ jid, text, threadTs });
       logger.warn(
         { jid, err, queueSize: this.outgoingQueue.length },
         'Failed to send Slack message, queued',
@@ -281,17 +314,23 @@ export class SlackChannel implements Channel {
     jid: string,
     filePath: string,
     caption?: string,
+    options?: SendMessageOptions,
   ): Promise<void> {
     const channelId = jid.replace(/^slack:/, '');
     const filename = filePath.split('/').pop() || 'image.png';
 
     try {
-      await this.app.client.filesUploadV2({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const uploadArgs: any = {
         channel_id: channelId,
         file: filePath,
         filename,
         initial_comment: caption || undefined,
-      });
+      };
+      if (options?.threadTs) {
+        uploadArgs.thread_ts = options.threadTs;
+      }
+      await this.app.client.filesUploadV2(uploadArgs);
       logger.info({ jid, filePath }, 'Slack image sent');
     } catch (err) {
       logger.error({ jid, filePath, err }, 'Failed to send Slack image');
@@ -410,6 +449,7 @@ export class SlackChannel implements Channel {
         await this.app.client.chat.postMessage({
           channel: channelId,
           text: item.text,
+          ...(item.threadTs ? { thread_ts: item.threadTs } : {}),
         });
         logger.info(
           { jid: item.jid, length: item.text.length },

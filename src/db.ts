@@ -106,6 +106,46 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Add thread_ts column to messages
+  try {
+    database.exec(`ALTER TABLE messages ADD COLUMN thread_ts TEXT`);
+  } catch {
+    /* column already exists */
+  }
+
+  // Add always_reply_in_thread column to registered_groups
+  try {
+    database.exec(
+      `ALTER TABLE registered_groups ADD COLUMN always_reply_in_thread INTEGER DEFAULT 1`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  // Migrate sessions table to composite PK (group_folder, thread_key)
+  try {
+    // Check if thread_key column exists
+    const cols = database
+      .prepare("PRAGMA table_info('sessions')")
+      .all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === 'thread_key')) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS sessions_new (
+          group_folder TEXT NOT NULL,
+          thread_key TEXT NOT NULL DEFAULT '',
+          session_id TEXT NOT NULL,
+          PRIMARY KEY (group_folder, thread_key)
+        );
+        INSERT OR IGNORE INTO sessions_new (group_folder, thread_key, session_id)
+          SELECT group_folder, '', session_id FROM sessions;
+        DROP TABLE sessions;
+        ALTER TABLE sessions_new RENAME TO sessions;
+      `);
+    }
+  } catch {
+    /* migration already done or table doesn't exist yet */
+  }
+
   // Add channel and is_group columns if they don't exist (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE chats ADD COLUMN channel TEXT`);
@@ -249,7 +289,7 @@ export function setLastGroupSync(): void {
  */
 export function storeMessage(msg: NewMessage): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, thread_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -259,6 +299,7 @@ export function storeMessage(msg: NewMessage): void {
     msg.timestamp,
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
+    msg.threadTs || null,
   );
 }
 
@@ -274,9 +315,10 @@ export function storeMessageDirect(msg: {
   timestamp: string;
   is_from_me: boolean;
   is_bot_message?: boolean;
+  threadTs?: string;
 }): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, thread_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -286,6 +328,7 @@ export function storeMessageDirect(msg: {
     msg.timestamp,
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
+    msg.threadTs || null,
   );
 }
 
@@ -300,7 +343,7 @@ export function getNewMessages(
   // Filter bot messages using both the is_bot_message flag AND the content
   // prefix as a backstop for messages written before the migration ran.
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, thread_ts AS threadTs
     FROM messages
     WHERE timestamp > ? AND chat_jid IN (${placeholders})
       AND is_bot_message = 0 AND content NOT LIKE ?
@@ -328,7 +371,7 @@ export function getMessagesSince(
   // Filter bot messages using both the is_bot_message flag AND the content
   // prefix as a backstop for messages written before the migration ran.
   const sql = `
-    SELECT id, chat_jid, sender, sender_name, content, timestamp
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, thread_ts AS threadTs
     FROM messages
     WHERE chat_jid = ? AND timestamp > ?
       AND is_bot_message = 0 AND content NOT LIKE ?
@@ -338,6 +381,30 @@ export function getMessagesSince(
   return db
     .prepare(sql)
     .all(chatJid, sinceTimestamp, `${botPrefix}:%`) as NewMessage[];
+}
+
+/**
+ * Get messages for a specific thread (by thread_ts) since a timestamp.
+ * Used for per-thread container processing.
+ */
+export function getMessagesSinceForThread(
+  chatJid: string,
+  sinceTimestamp: string,
+  botPrefix: string,
+  threadTs: string,
+): NewMessage[] {
+  const sql = `
+    SELECT id, chat_jid, sender, sender_name, content, timestamp, thread_ts AS threadTs
+    FROM messages
+    WHERE chat_jid = ? AND timestamp > ?
+      AND is_bot_message = 0 AND content NOT LIKE ?
+      AND content != '' AND content IS NOT NULL
+      AND thread_ts = ?
+    ORDER BY timestamp
+  `;
+  return db
+    .prepare(sql)
+    .all(chatJid, sinceTimestamp, `${botPrefix}:%`, threadTs) as NewMessage[];
 }
 
 export function createTask(
@@ -490,26 +557,43 @@ export function setRouterState(key: string, value: string): void {
 
 // --- Session accessors ---
 
-export function getSession(groupFolder: string): string | undefined {
+export function getSession(
+  groupFolder: string,
+  threadKey?: string,
+): string | undefined {
   const row = db
-    .prepare('SELECT session_id FROM sessions WHERE group_folder = ?')
-    .get(groupFolder) as { session_id: string } | undefined;
+    .prepare(
+      'SELECT session_id FROM sessions WHERE group_folder = ? AND thread_key = ?',
+    )
+    .get(groupFolder, threadKey || '') as { session_id: string } | undefined;
   return row?.session_id;
 }
 
-export function setSession(groupFolder: string, sessionId: string): void {
+export function setSession(
+  groupFolder: string,
+  sessionId: string,
+  threadKey?: string,
+): void {
   db.prepare(
-    'INSERT OR REPLACE INTO sessions (group_folder, session_id) VALUES (?, ?)',
-  ).run(groupFolder, sessionId);
+    'INSERT OR REPLACE INTO sessions (group_folder, thread_key, session_id) VALUES (?, ?, ?)',
+  ).run(groupFolder, threadKey || '', sessionId);
 }
 
 export function getAllSessions(): Record<string, string> {
   const rows = db
-    .prepare('SELECT group_folder, session_id FROM sessions')
-    .all() as Array<{ group_folder: string; session_id: string }>;
+    .prepare('SELECT group_folder, thread_key, session_id FROM sessions')
+    .all() as Array<{
+    group_folder: string;
+    thread_key: string;
+    session_id: string;
+  }>;
   const result: Record<string, string> = {};
   for (const row of rows) {
-    result[row.group_folder] = row.session_id;
+    // Key format: "folder" for no thread, "folder:threadKey" for threads
+    const key = row.thread_key
+      ? `${row.group_folder}:${row.thread_key}`
+      : row.group_folder;
+    result[key] = row.session_id;
   }
   return result;
 }
@@ -530,6 +614,7 @@ export function getRegisteredGroup(
         added_at: string;
         container_config: string | null;
         requires_trigger: number | null;
+        always_reply_in_thread: number | null;
       }
     | undefined;
   if (!row) return undefined;
@@ -551,6 +636,10 @@ export function getRegisteredGroup(
       : undefined,
     requiresTrigger:
       row.requires_trigger === null ? undefined : row.requires_trigger === 1,
+    alwaysReplyInThread:
+      row.always_reply_in_thread === null
+        ? undefined
+        : row.always_reply_in_thread === 1,
   };
 }
 
@@ -559,8 +648,8 @@ export function setRegisteredGroup(jid: string, group: RegisteredGroup): void {
     throw new Error(`Invalid group folder "${group.folder}" for JID ${jid}`);
   }
   db.prepare(
-    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, always_reply_in_thread)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     jid,
     group.name,
@@ -569,6 +658,11 @@ export function setRegisteredGroup(jid: string, group: RegisteredGroup): void {
     group.added_at,
     group.containerConfig ? JSON.stringify(group.containerConfig) : null,
     group.requiresTrigger === undefined ? 1 : group.requiresTrigger ? 1 : 0,
+    group.alwaysReplyInThread === undefined
+      ? 1
+      : group.alwaysReplyInThread
+        ? 1
+        : 0,
   );
 }
 
@@ -581,6 +675,7 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     added_at: string;
     container_config: string | null;
     requires_trigger: number | null;
+    always_reply_in_thread: number | null;
   }>;
   const result: Record<string, RegisteredGroup> = {};
   for (const row of rows) {
@@ -601,6 +696,10 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
         : undefined,
       requiresTrigger:
         row.requires_trigger === null ? undefined : row.requires_trigger === 1,
+      alwaysReplyInThread:
+        row.always_reply_in_thread === null
+          ? undefined
+          : row.always_reply_in_thread === 1,
     };
   }
   return result;
