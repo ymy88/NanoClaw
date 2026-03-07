@@ -122,10 +122,16 @@ The agent's personality is defined in `groups/global/PERSONALITY.md`. This file 
 
 AskUserQuestion: Would you like to set up a custom personality for your agent? Options: Yes, customize / No, use default (helpful assistant named Andy)
 
-**If yes:** Ask the user to describe their agent's personality — name, traits, speaking style, relationship to the user. Write the same content to both `groups/global/PERSONALITY.md` and `groups/main/PERSONALITY.md` using the storyteller framing pattern:
+**If yes:** Ask the user to describe their agent's personality — name, traits, speaking style, relationship to the user. Also ask:
+
+AskUserQuestion: What timezone should the agent use? (e.g., Asia/Shanghai, America/New_York, Europe/London)
+
+Write the same content to both `groups/global/PERSONALITY.md` and `groups/main/PERSONALITY.md` using the storyteller framing pattern, with the timezone at the top:
 
 ```markdown
 # [Name]
+
+**Timezone**: [timezone]
 
 You are a creative storyteller writing dialogue as [Name], a [description]. Every response you write is from [Name]'s perspective — [traits]. Stay in character. Never break the fourth wall. Write only what [Name] would say.
 ```
