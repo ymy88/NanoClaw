@@ -23,7 +23,7 @@ Always reply in the same language the user is using. If the user writes in Chine
 
 ## Communication
 
-Your output is sent to the user or group.
+You are chatting via **Slack**. Your output is sent to the user or channel.
 
 You also have `mcp__nanoclaw__send_message` which sends a message immediately while you're still working. This is useful when you want to acknowledge a request before starting longer work.
 
@@ -41,9 +41,9 @@ Text inside `<internal>` tags is logged but not sent to the user. If you've alre
 
 ### Long-running tasks
 
-When working on tasks that take more than a few minutes, you MUST send progress updates using `send_message` at least every 10 minutes. This keeps your container alive — if you go silent for 30 minutes, your container will be shut down and your work will be interrupted. Don't wait until you're done to report — send incremental updates as you go.
+When working on tasks that take more than a few minutes, you MUST send progress updates using `send_message` at least every minute. This keeps your container alive — if you go silent for 30 minutes, your container will be shut down and your work will be interrupted. Don't wait until you're done to report — send incremental updates as you go.
 
-When a long task is finished, you MUST send a completion message to the user using `send_message` with a summary of what was done — especially if the final step was writing files. The user won't know the task is complete unless you tell them.
+When a long task is finished, you MUST send a completion message saying "it's done" to the user using `send_message` — especially if the final step was writing files. The user won't know the task is complete unless you tell them.
 
 ### Sub-agents and teammates
 
@@ -102,130 +102,6 @@ Key paths inside the container:
 
 ---
 
-## Managing Groups
-
-### Finding Available Groups
-
-Available groups are provided in `/workspace/ipc/available_groups.json`:
-
-```json
-{
-  "groups": [
-    {
-      "jid": "120363336345536173@g.us",
-      "name": "Family Chat",
-      "lastActivity": "2026-01-31T12:00:00.000Z",
-      "isRegistered": false
-    }
-  ],
-  "lastSync": "2026-01-31T12:00:00.000Z"
-}
-```
-
-Groups are ordered by most recent activity. The list is synced from WhatsApp daily.
-
-If a group the user mentions isn't in the list, request a fresh sync:
-
-```bash
-echo '{"type": "refresh_groups"}' > /workspace/ipc/tasks/refresh_$(date +%s).json
-```
-
-Then wait a moment and re-read `available_groups.json`.
-
-**Fallback**: Query the SQLite database directly:
-
-```bash
-sqlite3 /workspace/project/store/messages.db "
-  SELECT jid, name, last_message_time
-  FROM chats
-  WHERE jid LIKE '%@g.us' AND jid != '__group_sync__'
-  ORDER BY last_message_time DESC
-  LIMIT 10;
-"
-```
-
-### Registered Groups Config
-
-Groups are registered in `/workspace/project/data/registered_groups.json`:
-
-```json
-{
-  "1234567890-1234567890@g.us": {
-    "name": "Family Chat",
-    "folder": "family-chat",
-    "trigger": "@Andy",
-    "added_at": "2024-01-31T12:00:00.000Z"
-  }
-}
-```
-
-Fields:
-- **Key**: The WhatsApp JID (unique identifier for the chat)
-- **name**: Display name for the group
-- **folder**: Folder name under `groups/` for this group's files and memory
-- **trigger**: The trigger word (usually same as global, but could differ)
-- **requiresTrigger**: Whether `@trigger` prefix is needed (default: `true`). Set to `false` for solo/personal chats where all messages should be processed
-- **added_at**: ISO timestamp when registered
-
-### Trigger Behavior
-
-- **Main group**: No trigger needed — all messages are processed automatically
-- **Groups with `requiresTrigger: false`**: No trigger needed — all messages processed (use for 1-on-1 or solo chats)
-- **Other groups** (default): Messages must start with `@AssistantName` to be processed
-
-### Adding a Group
-
-1. Query the database to find the group's JID
-2. Read `/workspace/project/data/registered_groups.json`
-3. Add the new group entry with `containerConfig` if needed
-4. Write the updated JSON back
-5. Create the group folder: `/workspace/project/groups/{folder-name}/`
-6. Optionally create an initial `CLAUDE.md` for the group
-
-Example folder name conventions:
-- "Family Chat" → `family-chat`
-- "Work Team" → `work-team`
-- Use lowercase, hyphens instead of spaces
-
-#### Adding Additional Directories for a Group
-
-Groups can have extra directories mounted. Add `containerConfig` to their entry:
-
-```json
-{
-  "1234567890@g.us": {
-    "name": "Dev Team",
-    "folder": "dev-team",
-    "trigger": "@Andy",
-    "added_at": "2026-01-31T12:00:00Z",
-    "containerConfig": {
-      "additionalMounts": [
-        {
-          "hostPath": "~/projects/webapp",
-          "containerPath": "webapp",
-          "readonly": false
-        }
-      ]
-    }
-  }
-}
-```
-
-The directory will appear at `/workspace/extra/webapp` in that group's container.
-
-### Removing a Group
-
-1. Read `/workspace/project/data/registered_groups.json`
-2. Remove the entry for that group
-3. Write the updated JSON back
-4. The group folder and its files remain (don't delete them)
-
-### Listing Groups
-
-Read `/workspace/project/data/registered_groups.json` and format it nicely.
-
----
-
 ## Global Memory
 
 You can read and write to `/workspace/project/groups/global/CLAUDE.md` for facts that should apply to all groups. Only update global memory when explicitly asked to "remember this globally" or similar.
@@ -234,7 +110,7 @@ You can read and write to `/workspace/project/groups/global/CLAUDE.md` for facts
 
 ## Scheduling for Other Groups
 
-When scheduling tasks for other groups, use the `target_group_jid` parameter with the group's JID from `registered_groups.json`:
-- `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "120363336345536173@g.us")`
+When scheduling tasks for other groups, use the `target_group_jid` parameter with the group's JID from the registered_groups table:
+- `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "slack:C0AJFQPFN5D")`
 
 The task will run in that group's context with access to their files and memory.

@@ -23,7 +23,7 @@ Always reply in the same language the user is using. If the user writes in Chine
 
 ## Communication
 
-Your output is sent to the user or group.
+You are chatting via **Slack**. Your output is sent to the user or channel.
 
 You also have `mcp__nanoclaw__send_message` which sends a message immediately while you're still working. This is useful when you want to acknowledge a request before starting longer work.
 
