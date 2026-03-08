@@ -50,6 +50,7 @@ export class SlackChannel implements Channel {
   }> = [];
   private flushing = false;
   private userNameCache = new Map<string, string>();
+  private userTzCache = new Map<string, string>();
 
   private opts: SlackChannelOpts;
 
@@ -223,6 +224,7 @@ export class SlackChannel implements Channel {
         is_from_me: isBotMessage,
         is_bot_message: isBotMessage,
         threadTs,
+        senderTimezone: msg.user ? this.userTzCache.get(msg.user) : undefined,
       });
     });
   }
@@ -425,6 +427,8 @@ export class SlackChannel implements Channel {
       const result = await this.app.client.users.info({ user: userId });
       const name = result.user?.real_name || result.user?.name;
       if (name) this.userNameCache.set(userId, name);
+      const tz = (result.user as { tz?: string })?.tz;
+      if (tz) this.userTzCache.set(userId, tz);
       return name;
     } catch (err) {
       logger.debug({ userId, err }, 'Failed to resolve Slack user name');

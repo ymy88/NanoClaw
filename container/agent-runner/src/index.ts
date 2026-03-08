@@ -30,6 +30,7 @@ interface ContainerInput {
   secrets?: Record<string, string>;
   replyThreadTs?: string;
   threadKey?: string;
+  senderTimezone?: string;
 }
 
 interface ContainerOutput {
@@ -534,6 +535,20 @@ async function main(): Promise<void> {
   // Clean up stale _close sentinel from previous container runs
   try { fs.unlinkSync(IPC_INPUT_CLOSE_SENTINEL); } catch { /* ignore */ }
 
+  // Prepend current time in the user's timezone to prompts
+  const userTz = containerInput.senderTimezone || process.env.TZ || 'UTC';
+  const prependTime = (text: string) => {
+    const now = new Date();
+    const formatted = now.toLocaleString('sv-SE', {
+      timeZone: userTz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    });
+    const weekday = now.toLocaleString('en-US', { timeZone: userTz, weekday: 'long' });
+    return `[Current time: ${weekday} ${formatted} (${userTz})]\n\n${text}`;
+  };
+
   // Build initial prompt (drain any pending IPC messages too)
   let prompt = containerInput.prompt;
   if (containerInput.isScheduledTask) {
@@ -544,6 +559,9 @@ async function main(): Promise<void> {
     log(`Draining ${pending.length} pending IPC messages into initial prompt`);
     prompt += '\n' + pending.join('\n');
   }
+
+  // Prepend time to initial prompt
+  prompt = prependTime(prompt);
 
   // Query loop: run query → wait for IPC message → run new query → repeat
   let resumeAt: string | undefined;
@@ -580,7 +598,7 @@ async function main(): Promise<void> {
       }
 
       log(`Got new message (${nextMessage.length} chars), starting new query`);
-      prompt = nextMessage;
+      prompt = prependTime(nextMessage);
     }
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);

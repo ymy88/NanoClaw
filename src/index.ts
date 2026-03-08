@@ -206,6 +206,11 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
 
   const prompt = channelContext + formatMessages(missedMessages);
 
+  // Extract sender timezone from the most recent non-bot message
+  const senderTimezone = [...missedMessages]
+    .reverse()
+    .find((m) => !m.is_bot_message && m.senderTimezone)?.senderTimezone;
+
   // Compute reply thread ts from threadKey for Slack thread replies
   const replyThreadTs = threadKey ? unsanitizeThreadKey(threadKey) : undefined;
 
@@ -254,6 +259,7 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
     chatJid,
     threadKey,
     replyThreadTs,
+    senderTimezone,
     async (result) => {
       // Streaming output callback — called for each agent result
       if (result.result) {
@@ -317,6 +323,7 @@ async function runAgent(
   chatJid: string,
   threadKey?: string | null,
   replyThreadTs?: string,
+  senderTimezone?: string,
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
   const isMain = group.folder === MAIN_GROUP_FOLDER;
@@ -373,6 +380,7 @@ async function runAgent(
         assistantName: ASSISTANT_NAME,
         replyThreadTs,
         threadKey: threadKey || undefined,
+        senderTimezone,
       },
       (proc, containerName) =>
         queue.registerProcess(

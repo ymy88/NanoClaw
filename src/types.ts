@@ -52,6 +52,7 @@ export interface NewMessage {
   is_from_me?: boolean;
   is_bot_message?: boolean;
   threadTs?: string; // Slack thread_ts (reply target)
+  senderTimezone?: string; // e.g., "Asia/Shanghai"
 }
 
 export interface SendMessageOptions {

@@ -45,6 +45,7 @@ export interface ContainerInput {
   secrets?: Record<string, string>;
   replyThreadTs?: string;
   threadKey?: string;
+  senderTimezone?: string;
 }
 
 export interface ContainerOutput {

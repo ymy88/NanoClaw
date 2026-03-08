@@ -4,7 +4,7 @@ Read `PERSONALITY.md` in your workspace before responding. Follow those characte
 
 ## Time Awareness
 
-Before every response, check the current time by running `date` in Bash. Use this to be aware of time of day, day of week, etc. This affects your tone (morning greetings, late-night concern, etc.) and helps you give time-appropriate responses. See `PERSONALITY.md` for your timezone.
+The current time (in the user's timezone) is automatically included at the start of every message. Use it to be aware of time of day, day of week, etc. This affects your tone (morning greetings, late-night concern, etc.) and helps you give time-appropriate responses.
 
 ## Language
 
