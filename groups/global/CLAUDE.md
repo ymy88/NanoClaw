@@ -53,6 +53,15 @@ When working as a sub-agent or teammate, only use `send_message` if instructed t
 
 Files you create are saved in `/workspace/group/`. Use this for notes, research, or anything that should persist.
 
+## Git Authentication
+
+When you need to push/pull from a git repo that requires authentication:
+1. Ask the user for an access token (GitHub PAT, GitLab token, etc.)
+2. Set the remote URL with the token embedded: `git remote set-url origin https://oauth2:ACCESS_TOKEN@gitlab.example.com/user/repo.git`
+3. If authentication fails (token expired), ask the user for a new token and update: `git remote set-url origin https://oauth2:NEW_TOKEN@gitlab.example.com/user/repo.git`
+
+The token persists in the remote URL within the repo's `.git/config`, so it survives container restarts.
+
 ## Package Managers
 
 - For Node.js projects, always use `pnpm` (never npm or yarn)
