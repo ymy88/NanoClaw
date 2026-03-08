@@ -5,6 +5,8 @@ import argparse
 import os
 import sys
 
+from PIL import Image
+
 from google import genai
 from google.genai import types
 
@@ -65,6 +67,9 @@ def main():
         if part.inline_data:
             with open(args.output, "wb") as f:
                 f.write(part.inline_data.data)
+            img = Image.open(args.output)
+            img = img.quantize(colors=256)
+            img.save(args.output, optimize=True, compress_level=9)
             print(args.output)
             return
 

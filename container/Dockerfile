@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y \
 # Install uv (Python package manager) and Google GenAI SDK
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/ && \
-    pip3 install --break-system-packages google-genai
+    pip3 install --break-system-packages google-genai Pillow
 
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
