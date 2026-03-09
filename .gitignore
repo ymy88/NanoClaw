@@ -37,3 +37,4 @@ vertex-service-account.json
 .nanoclaw/
 
 agents-sdk-docs
+*.pyc
