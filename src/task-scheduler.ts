@@ -149,8 +149,14 @@ async function runTask(
       async (streamedOutput: ContainerOutput) => {
         if (streamedOutput.result) {
           result = streamedOutput.result;
-          // Forward result to user (sendMessage handles formatting)
-          await deps.sendMessage(task.chat_jid, streamedOutput.result);
+          // Strip internal reasoning and meta-only responses before forwarding
+          const cleaned = streamedOutput.result
+            .replace(/<internal>[\s\S]*?<\/internal>/g, '')
+            .replace(/no response requested\.?/gi, '')
+            .trim();
+          if (cleaned) {
+            await deps.sendMessage(task.chat_jid, cleaned);
+          }
           scheduleClose();
         }
         if (streamedOutput.status === 'success') {
