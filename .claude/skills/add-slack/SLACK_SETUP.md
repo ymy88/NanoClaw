@@ -59,6 +59,9 @@ These scopes control what the bot is allowed to do.
 | `channels:read` | List channels (for metadata sync) |
 | `groups:read` | List private channels (for metadata sync) |
 | `users:read` | Look up user display names |
+| `files:write` | Upload images and files |
+| `files:read` | Download shared files from messages |
+| `reactions:write` | Add/remove emoji reactions (used as typing indicator) |
 
 ## Step 5: Install to Workspace
 

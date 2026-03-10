@@ -296,6 +296,49 @@ export class SlackChannel implements Channel {
     }
   }
 
+  async addReaction(
+    jid: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<void> {
+    const channelId = jid.replace(/^slack:/, '');
+    try {
+      await this.app.client.reactions.add({
+        channel: channelId,
+        timestamp: messageId,
+        name: emoji,
+      });
+    } catch (err: unknown) {
+      const code = (err as { data?: { error?: string } })?.data?.error;
+      if (code !== 'already_reacted') {
+        logger.warn({ jid, messageId, emoji, err }, 'Failed to add reaction');
+      }
+    }
+  }
+
+  async removeReaction(
+    jid: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<void> {
+    const channelId = jid.replace(/^slack:/, '');
+    try {
+      await this.app.client.reactions.remove({
+        channel: channelId,
+        timestamp: messageId,
+        name: emoji,
+      });
+    } catch (err: unknown) {
+      const code = (err as { data?: { error?: string } })?.data?.error;
+      if (code !== 'no_reaction') {
+        logger.warn(
+          { jid, messageId, emoji, err },
+          'Failed to remove reaction',
+        );
+      }
+    }
+  }
+
   isConnected(): boolean {
     return this.connected;
   }
@@ -340,8 +383,29 @@ export class SlackChannel implements Channel {
   // Slack does not expose a typing indicator API for bots.
   // This no-op satisfies the Channel interface so the orchestrator
   // doesn't need channel-specific branching.
-  async setTyping(_jid: string, _isTyping: boolean): Promise<void> {
-    // no-op: Slack Bot API has no typing indicator endpoint
+  private typingMessageId: string | null = null;
+  private typingChannelId: string | null = null;
+
+  async setTyping(
+    jid: string,
+    isTyping: boolean,
+    messageId?: string,
+  ): Promise<void> {
+    const channelId = jid.replace(/^slack:/, '');
+
+    if (isTyping && messageId) {
+      // Clear previous typing reaction if on a different message
+      if (this.typingMessageId && this.typingMessageId !== messageId) {
+        await this.removeReaction(jid, this.typingMessageId, 'pencil2');
+      }
+      this.typingMessageId = messageId;
+      this.typingChannelId = channelId;
+      await this.addReaction(jid, messageId, 'pencil2');
+    } else if (!isTyping && this.typingMessageId) {
+      await this.removeReaction(jid, this.typingMessageId, 'pencil2');
+      this.typingMessageId = null;
+      this.typingChannelId = null;
+    }
   }
 
   /**

@@ -97,7 +97,7 @@ export interface Channel {
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;
   // Optional: typing indicator. Channels that support it implement it.
-  setTyping?(jid: string, isTyping: boolean): Promise<void>;
+  setTyping?(jid: string, isTyping: boolean, messageId?: string): Promise<void>;
   // Optional: send an image file. Channels that support it implement it.
   sendImage?(
     jid: string,

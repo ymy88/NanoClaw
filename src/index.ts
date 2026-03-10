@@ -226,6 +226,11 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
     missedMessages[missedMessages.length - 1].timestamp;
   saveState();
 
+  // Find the last user message to use as typing indicator target
+  const triggerMessage = [...missedMessages]
+    .reverse()
+    .find((m) => !m.is_bot_message);
+
   logger.info(
     {
       group: group.name,
@@ -249,7 +254,7 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
     }, IDLE_TIMEOUT);
   };
 
-  await channel.setTyping?.(chatJid, true);
+  await channel.setTyping?.(chatJid, true, triggerMessage?.id);
   let hadError = false;
   let outputSentToUser = false;
 
@@ -274,6 +279,7 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
           `Agent output: ${raw.slice(0, 200)}`,
         );
         if (text) {
+          await channel.setTyping?.(chatJid, false);
           await channel.sendMessage(chatJid, text, sendOptions);
           outputSentToUser = true;
         }
@@ -292,6 +298,7 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
   );
 
   await channel.setTyping?.(chatJid, false);
+  // Safety: ensure typing indicator is cleared when agent finishes
   if (idleTimer) clearTimeout(idleTimer);
 
   if (output === 'error' || hadError) {
@@ -506,9 +513,12 @@ async function startMessageLoop(): Promise<void> {
             lastAgentTimestamp[queueKey] =
               messagesToSend[messagesToSend.length - 1].timestamp;
             saveState();
-            // Show typing indicator while the container processes the piped message
+            // Show typing indicator on the last user message
+            const lastUserMsg = [...messagesToSend]
+              .reverse()
+              .find((m) => !m.is_bot_message);
             channel
-              .setTyping?.(chatJid, true)
+              .setTyping?.(chatJid, true, lastUserMsg?.id)
               ?.catch((err) =>
                 logger.warn({ chatJid, err }, 'Failed to set typing indicator'),
               );
@@ -647,6 +657,7 @@ async function main(): Promise<void> {
     sendMessage: (jid, text, options) => {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
+      channel.setTyping?.(jid, false);
       return channel.sendMessage(jid, text, options);
     },
     sendImage: async (jid, filePath, caption, options) => {
