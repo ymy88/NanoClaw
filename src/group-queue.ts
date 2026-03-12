@@ -1,4 +1,4 @@
-import { ChildProcess } from 'child_process';
+import { ChildProcess, execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -262,9 +262,35 @@ export class GroupQueue {
     }
   }
 
-  /**
-   * Signal the active container to wind down by writing a close sentinel.
-   */
+  getActiveQueueKeys(): string[] {
+    return [...this.groups.entries()]
+      .filter(([, state]) => state.active)
+      .map(([key]) => key);
+  }
+
+  killContainer(queueKey: string): boolean {
+    const state = this.getGroup(queueKey);
+    if (!state.active || !state.process) return false;
+
+    logger.info(
+      { queueKey, containerName: state.containerName },
+      'Killing container',
+    );
+    // Clear pending work so drainGroup doesn't start a new container
+    state.pendingMessages = false;
+    state.pendingTasks = [];
+    // Kill the Docker container directly — SIGKILL on the host process
+    // doesn't stop the container itself
+    if (state.containerName) {
+      try {
+        execSync(`docker kill ${state.containerName}`, { timeout: 5000 });
+      } catch {
+        // Container may have already exited
+      }
+    }
+    return true;
+  }
+
   closeStdin(queueKey: string): void {
     const state = this.getGroup(queueKey);
     if (!state.active || !state.groupFolder) return;

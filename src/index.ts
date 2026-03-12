@@ -65,11 +65,19 @@ import { readEnvFile } from './env.js';
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
 
+const STOP_PATTERN = /^\s*(?:@\S+\s+)?\/stop\s*$/;
+
+function isStopCommand(content: string): boolean {
+  return STOP_PATTERN.test(content);
+}
+
 let lastTimestamp = '';
 let sessions: Record<string, string> = {};
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
+// Queue keys that were stopped via /stop — skip cursor rollback on error
+const stoppedQueueKeys = new Set<string>();
 
 let whatsapp: WhatsAppChannel;
 let slack: SlackChannel | undefined;
@@ -167,7 +175,7 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
 
   // For threaded messages, use thread-specific query; otherwise get all messages
   const sinceTimestamp = lastAgentTimestamp[queueKey] || '';
-  const missedMessages = threadKey
+  let missedMessages = threadKey
     ? getMessagesSinceForThread(
         chatJid,
         sinceTimestamp,
@@ -176,6 +184,8 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
       )
     : getMessagesSince(chatJid, sinceTimestamp, ASSISTANT_NAME);
 
+  // Filter out /stop commands — they're handled in the message loop
+  missedMessages = missedMessages.filter((m) => !isStopCommand(m.content));
   if (missedMessages.length === 0) return true;
 
   // For non-main groups, check if trigger is required and present
@@ -308,6 +318,15 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
       logger.warn(
         { group: group.name },
         'Agent error after output was sent, skipping cursor rollback to prevent duplicates',
+      );
+      return true;
+    }
+    // If killed by /stop, don't roll back — the user intentionally cancelled
+    if (stoppedQueueKeys.has(queueKey)) {
+      stoppedQueueKeys.delete(queueKey);
+      logger.info(
+        { group: group.name },
+        'Agent killed by /stop, skipping cursor rollback',
       );
       return true;
     }
@@ -500,6 +519,41 @@ async function startMessageLoop(): Promise<void> {
             continue;
           }
 
+          // Handle /stop command — kill active container immediately
+          const hasStop = groupMessages.some(
+            (m) => !m.is_bot_message && isStopCommand(m.content),
+          );
+          if (hasStop) {
+            // Kill containers for all queue keys matching this chatJid
+            let killed = false;
+            for (const key of queue.getActiveQueueKeys()) {
+              if (key === chatJid || key.startsWith(`${chatJid}:`)) {
+                if (queue.killContainer(key)) {
+                  killed = true;
+                  stoppedQueueKeys.add(key);
+                }
+              }
+            }
+            if (killed) {
+              logger.info({ chatJid }, '/stop: killed active container');
+            }
+            // Acknowledge with a checkmark reaction on the stop message
+            const stopMsg = [...groupMessages]
+              .reverse()
+              .find((m) => !m.is_bot_message && isStopCommand(m.content));
+            if (stopMsg) {
+              channel.setTyping?.(chatJid, false)?.catch(() => {});
+              channel
+                .addReaction?.(chatJid, stopMsg.id, 'white_check_mark')
+                ?.catch(() => {});
+            }
+            // Advance cursor past the stop message so it doesn't get re-processed
+            lastAgentTimestamp[queueKey] =
+              groupMessages[groupMessages.length - 1].timestamp;
+            saveState();
+            continue;
+          }
+
           const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
           const needsTrigger = !isMainGroup && group.requiresTrigger !== false;
 
@@ -527,8 +581,10 @@ async function startMessageLoop(): Promise<void> {
                 lastAgentTimestamp[queueKey] || '',
                 ASSISTANT_NAME,
               );
-          const messagesToSend =
-            allPending.length > 0 ? allPending : groupMessages;
+          const messagesToSend = (
+            allPending.length > 0 ? allPending : groupMessages
+          ).filter((m) => !isStopCommand(m.content));
+          if (messagesToSend.length === 0) continue;
           const formatted = formatMessages(messagesToSend);
 
           if (queue.sendMessage(queueKey, formatted)) {

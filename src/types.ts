@@ -98,6 +98,8 @@ export interface Channel {
   disconnect(): Promise<void>;
   // Optional: typing indicator. Channels that support it implement it.
   setTyping?(jid: string, isTyping: boolean, messageId?: string): Promise<void>;
+  // Optional: add a reaction emoji to a message.
+  addReaction?(jid: string, messageId: string, emoji: string): Promise<void>;
   // Optional: send an image file. Channels that support it implement it.
   sendImage?(
     jid: string,
