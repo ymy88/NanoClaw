@@ -604,6 +604,22 @@ export function setSession(
   ).run(groupFolder, threadKey || '', sessionId);
 }
 
+export function deleteSession(groupFolder: string, threadKey?: string): void {
+  db.prepare(
+    'DELETE FROM sessions WHERE group_folder = ? AND thread_key = ?',
+  ).run(groupFolder, threadKey || '');
+}
+
+export function getSessionsForGroup(
+  groupFolder: string,
+): Array<{ thread_key: string; session_id: string }> {
+  return db
+    .prepare(
+      'SELECT thread_key, session_id FROM sessions WHERE group_folder = ?',
+    )
+    .all(groupFolder) as Array<{ thread_key: string; session_id: string }>;
+}
+
 export function getAllSessions(): Record<string, string> {
   const rows = db
     .prepare('SELECT group_folder, thread_key, session_id FROM sessions')

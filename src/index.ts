@@ -430,6 +430,32 @@ async function startMessageLoop(): Promise<void> {
   logger.info(`NanoClaw running (trigger: @${ASSISTANT_NAME})`);
 
   while (true) {
+    // Check for session reset signals from compact-history script
+    for (const group of Object.values(registeredGroups)) {
+      const resetFile = path.join(
+        DATA_DIR,
+        'ipc',
+        group.folder,
+        '_session_reset',
+      );
+      if (fs.existsSync(resetFile)) {
+        try {
+          fs.unlinkSync(resetFile);
+        } catch {
+          /* ignore */
+        }
+        for (const key of Object.keys(sessions)) {
+          if (key === group.folder || key.startsWith(`${group.folder}:`)) {
+            delete sessions[key];
+          }
+        }
+        logger.info(
+          { group: group.name },
+          'Session reset: cleared in-memory sessions',
+        );
+      }
+    }
+
     try {
       const jids = Object.keys(registeredGroups);
       const { messages, newTimestamp } = getNewMessages(

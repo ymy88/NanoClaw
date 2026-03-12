@@ -560,6 +560,16 @@ async function main(): Promise<void> {
     prompt += '\n' + pending.join('\n');
   }
 
+  // Load conversation context from a previous compacted session
+  const contextFilePath = '/workspace/group/.conversation-context.md';
+  if (!containerInput.sessionId && fs.existsSync(contextFilePath)) {
+    const contextContent = fs.readFileSync(contextFilePath, 'utf-8');
+    log(`Found conversation context file (${contextContent.length} chars)`);
+    prompt = `<conversation-context>\n${contextContent}\n</conversation-context>\n\n${prompt}`;
+    fs.unlinkSync(contextFilePath);
+    log('Deleted conversation context file after loading');
+  }
+
   // Prepend time to initial prompt
   prompt = prependTime(prompt);
 
