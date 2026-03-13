@@ -101,7 +101,7 @@ function setupLaunchd(
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin</string>
+        <string>/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin:${homeDir}/.volta/bin</string>
         <key>HOME</key>
         <string>${homeDir}</string>
     </dict>
