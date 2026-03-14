@@ -109,6 +109,12 @@ server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools.
 
+IMPORTANT - SPEC FILE CONVENTION:
+Always write the full task instructions to a spec file FIRST, then use the file path as the prompt:
+1. Write instructions to /workspace/group/scheduled-task-specs/{task-name}.md
+2. Set prompt to: "Read and follow the instructions in /workspace/group/scheduled-task-specs/{task-name}.md"
+This makes tasks easy to edit later — just update the spec file, no need to reschedule.
+
 CONTEXT MODE - Choose based on task type:
 \u2022 "group": Task runs in the group's conversation context, with access to chat history. Use for tasks that need context about ongoing discussions, user preferences, or recent interactions.
 \u2022 "isolated": Task runs in a fresh session with no conversation history. Use for independent tasks that don't need prior context. When using isolated mode, include all necessary context in the prompt itself.
