@@ -132,6 +132,12 @@ async function runTask(
     }, TASK_CLOSE_DELAY_MS);
   };
 
+  // Set task flags so IPC messages are stored with correct metadata
+  deps.queue.setTaskFlags(task.chat_jid, {
+    isTask: true,
+    excludeFromHistory: !!task.exclude_from_history,
+  });
+
   try {
     const output = await runContainerAgent(
       group,
@@ -142,6 +148,7 @@ async function runTask(
         chatJid: task.chat_jid,
         isMain,
         isScheduledTask: true,
+        excludeFromHistory: !!task.exclude_from_history,
         assistantName: ASSISTANT_NAME,
       },
       (proc, containerName) =>

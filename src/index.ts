@@ -38,6 +38,7 @@ import {
   setSession,
   storeChatMetadata,
   storeMessage,
+  storeMessageDirect,
 } from './db.js';
 import { GroupQueue, makeQueueKey, parseQueueKey } from './group-queue.js';
 import {
@@ -290,6 +291,17 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
         );
         if (text) {
           await channel.setTyping?.(chatJid, false);
+          storeMessageDirect({
+            id: `bot-${Date.now()}`,
+            chat_jid: chatJid,
+            sender: 'bot',
+            sender_name: ASSISTANT_NAME,
+            content: text,
+            timestamp: new Date().toISOString(),
+            is_from_me: true,
+            is_bot_message: true,
+            threadTs: sendOptions?.threadTs,
+          });
           await channel.sendMessage(chatJid, text, sendOptions);
           outputSentToUser = true;
         }
@@ -732,7 +744,22 @@ async function main(): Promise<void> {
         return;
       }
       const text = formatOutbound(rawText);
-      if (text) await channel.sendMessage(jid, text);
+      if (text) {
+        const taskFlags = queue.getTaskFlags(jid);
+        storeMessageDirect({
+          id: `bot-${Date.now()}`,
+          chat_jid: jid,
+          sender: 'bot',
+          sender_name: ASSISTANT_NAME,
+          content: text,
+          timestamp: new Date().toISOString(),
+          is_from_me: true,
+          is_bot_message: true,
+          is_scheduled_task: true,
+          exclude_from_history: taskFlags.excludeFromHistory,
+        });
+        await channel.sendMessage(jid, text);
+      }
     },
   });
   startIpcWatcher({
@@ -740,11 +767,41 @@ async function main(): Promise<void> {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       channel.setTyping?.(jid, false);
+      const taskFlags = queue.getTaskFlags(jid);
+      storeMessageDirect({
+        id: `bot-${Date.now()}`,
+        chat_jid: jid,
+        sender: 'bot',
+        sender_name: ASSISTANT_NAME,
+        content: text,
+        timestamp: new Date().toISOString(),
+        is_from_me: true,
+        is_bot_message: true,
+        is_scheduled_task: taskFlags.isTask,
+        exclude_from_history: taskFlags.excludeFromHistory,
+        threadTs: options?.threadTs,
+      });
       return channel.sendMessage(jid, text, options);
     },
     sendImage: async (jid, filePath, caption, options) => {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
+      const taskFlags = queue.getTaskFlags(jid);
+      storeMessageDirect({
+        id: `bot-img-${Date.now()}`,
+        chat_jid: jid,
+        sender: 'bot',
+        sender_name: ASSISTANT_NAME,
+        content: caption
+          ? `[image: ${path.basename(filePath)}] ${caption}`
+          : `[image: ${path.basename(filePath)}]`,
+        timestamp: new Date().toISOString(),
+        is_from_me: true,
+        is_bot_message: true,
+        is_scheduled_task: taskFlags.isTask,
+        exclude_from_history: taskFlags.excludeFromHistory,
+        threadTs: options?.threadTs,
+      });
       if (channel.sendImage) {
         await channel.sendImage(jid, filePath, caption, options);
       } else {

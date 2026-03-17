@@ -18,6 +18,7 @@ interface GroupState {
   active: boolean;
   idleWaiting: boolean;
   isTaskContainer: boolean;
+  excludeFromHistory: boolean;
   pendingMessages: boolean;
   pendingTasks: QueuedTask[];
   activeTaskId: string | null;
@@ -85,6 +86,7 @@ export class GroupQueue {
         active: false,
         idleWaiting: false,
         isTaskContainer: false,
+        excludeFromHistory: false,
         pendingMessages: false,
         pendingTasks: [],
         activeTaskId: null,
@@ -260,6 +262,26 @@ export class GroupQueue {
     } catch {
       return false;
     }
+  }
+
+  setTaskFlags(
+    queueKey: string,
+    flags: { isTask: boolean; excludeFromHistory: boolean },
+  ): void {
+    const state = this.getGroup(queueKey);
+    state.isTaskContainer = flags.isTask;
+    state.excludeFromHistory = flags.excludeFromHistory;
+  }
+
+  getTaskFlags(queueKey: string): {
+    isTask: boolean;
+    excludeFromHistory: boolean;
+  } {
+    const state = this.getGroup(queueKey);
+    return {
+      isTask: state.isTaskContainer,
+      excludeFromHistory: state.excludeFromHistory,
+    };
   }
 
   getActiveQueueKeys(): string[] {

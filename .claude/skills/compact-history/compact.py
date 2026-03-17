@@ -50,7 +50,8 @@ def read_messages(db_path: Path, chat_jid: str, limit: int) -> list[dict]:
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT sender_name, content, is_bot_message FROM messages "
-        "WHERE chat_jid = ? ORDER BY timestamp DESC LIMIT ?",
+        "WHERE chat_jid = ? AND COALESCE(exclude_from_history, 0) = 0 "
+        "ORDER BY timestamp DESC LIMIT ?",
         (chat_jid, limit),
     ).fetchall()
     conn.close()

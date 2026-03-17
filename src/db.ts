@@ -113,6 +113,31 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Add is_scheduled_task and exclude_from_history columns to messages
+  try {
+    database.exec(
+      `ALTER TABLE messages ADD COLUMN is_scheduled_task INTEGER DEFAULT 0`,
+    );
+  } catch {
+    /* column already exists */
+  }
+  try {
+    database.exec(
+      `ALTER TABLE messages ADD COLUMN exclude_from_history INTEGER DEFAULT 0`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add exclude_from_history column to scheduled_tasks
+  try {
+    database.exec(
+      `ALTER TABLE scheduled_tasks ADD COLUMN exclude_from_history INTEGER DEFAULT 1`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
   // Add always_reply_in_thread column to registered_groups
   try {
     database.exec(
@@ -315,10 +340,12 @@ export function storeMessageDirect(msg: {
   timestamp: string;
   is_from_me: boolean;
   is_bot_message?: boolean;
+  is_scheduled_task?: boolean;
+  exclude_from_history?: boolean;
   threadTs?: string;
 }): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, thread_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, is_scheduled_task, exclude_from_history, thread_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -328,6 +355,8 @@ export function storeMessageDirect(msg: {
     msg.timestamp,
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
+    msg.is_scheduled_task ? 1 : 0,
+    msg.exclude_from_history ? 1 : 0,
     msg.threadTs || null,
   );
 }

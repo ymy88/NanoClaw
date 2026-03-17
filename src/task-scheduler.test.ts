@@ -26,6 +26,7 @@ describe('task scheduler', () => {
       schedule_type: 'once',
       schedule_value: '2026-02-22T00:00:00.000Z',
       context_mode: 'isolated',
+      exclude_from_history: true,
       next_run: new Date(Date.now() - 60_000).toISOString(),
       status: 'active',
       created_at: '2026-02-22T00:00:00.000Z',
