@@ -113,6 +113,13 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Add sent_method column to messages
+  try {
+    database.exec(`ALTER TABLE messages ADD COLUMN sent_method TEXT`);
+  } catch {
+    /* column already exists */
+  }
+
   // Add is_scheduled_task and exclude_from_history columns to messages
   try {
     database.exec(
@@ -342,10 +349,11 @@ export function storeMessageDirect(msg: {
   is_bot_message?: boolean;
   is_scheduled_task?: boolean;
   exclude_from_history?: boolean;
+  sent_method?: string;
   threadTs?: string;
 }): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, is_scheduled_task, exclude_from_history, thread_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, is_scheduled_task, exclude_from_history, sent_method, thread_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -357,6 +365,7 @@ export function storeMessageDirect(msg: {
     msg.is_bot_message ? 1 : 0,
     msg.is_scheduled_task ? 1 : 0,
     msg.exclude_from_history ? 1 : 0,
+    msg.sent_method || null,
     msg.threadTs || null,
   );
 }

@@ -159,7 +159,6 @@ async function runTask(
           // Strip internal reasoning and meta-only responses before forwarding
           const cleaned = streamedOutput.result
             .replace(/<internal>[\s\S]*?<\/internal>/g, '')
-            .replace(/no response requested\.?/gi, '')
             .trim();
           if (cleaned) {
             await deps.sendMessage(task.chat_jid, cleaned);

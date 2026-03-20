@@ -300,6 +300,7 @@ async function processGroupMessages(queueKey: string): Promise<boolean> {
             timestamp: new Date().toISOString(),
             is_from_me: true,
             is_bot_message: true,
+            sent_method: 'streaming_result',
             threadTs: sendOptions?.threadTs,
           });
           await channel.sendMessage(chatJid, text, sendOptions);
@@ -757,6 +758,7 @@ async function main(): Promise<void> {
           is_bot_message: true,
           is_scheduled_task: true,
           exclude_from_history: taskFlags.excludeFromHistory,
+          sent_method: 'scheduler_result',
         });
         await channel.sendMessage(jid, text);
       }
@@ -779,6 +781,7 @@ async function main(): Promise<void> {
         is_bot_message: true,
         is_scheduled_task: taskFlags.isTask,
         exclude_from_history: taskFlags.excludeFromHistory,
+        sent_method: 'ipc_send_message',
         threadTs: options?.threadTs,
       });
       return channel.sendMessage(jid, text, options);
@@ -800,6 +803,7 @@ async function main(): Promise<void> {
         is_bot_message: true,
         is_scheduled_task: taskFlags.isTask,
         exclude_from_history: taskFlags.excludeFromHistory,
+        sent_method: 'ipc_send_image',
         threadTs: options?.threadTs,
       });
       if (channel.sendImage) {
