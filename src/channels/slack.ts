@@ -53,6 +53,7 @@ export class SlackChannel implements Channel {
   private userTzCache = new Map<string, string>();
 
   private opts: SlackChannelOpts;
+  private appToken: string;
 
   constructor(opts: SlackChannelOpts) {
     this.opts = opts;
@@ -70,6 +71,7 @@ export class SlackChannel implements Channel {
     }
 
     this.botToken = botToken;
+    this.appToken = appToken;
 
     this.app = new App({
       token: botToken,
@@ -250,6 +252,93 @@ export class SlackChannel implements Channel {
 
     // Sync channel names on startup
     await this.syncChannelMetadata();
+
+    // Poll WebSocket health and auto-reconnect if dead.
+    // Bolt's SocketModeClient has built-in auto-reconnect, but its 'disconnected'
+    // event only fires when reconnect is disabled or disconnect() is called explicitly.
+    // With auto-reconnect enabled (the default), the client retries internally and
+    // never emits 'disconnected' — so we can't listen for it. Instead, we poll
+    // websocket.isActive() to detect when the connection is truly dead (e.g., after
+    // the client exhausts its own retries following a network outage).
+    this.startHealthCheck();
+  }
+
+  private reconnecting = false;
+  private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
+
+  private getWebSocket(): { isActive(): boolean } | null {
+    const receiver = this.app as unknown as {
+      receiver?: {
+        client?: { websocket?: { isActive(): boolean } };
+      };
+    };
+    return receiver.receiver?.client?.websocket ?? null;
+  }
+
+  private startHealthCheck(): void {
+    if (this.healthCheckTimer) return;
+    const HEALTH_CHECK_INTERVAL = 30_000; // 30 seconds
+
+    this.healthCheckTimer = setInterval(() => {
+      const ws = this.getWebSocket();
+      if (ws && !ws.isActive() && !this.reconnecting) {
+        logger.warn('Slack WebSocket is not active, reconnecting');
+        this.connected = false;
+        this.scheduleReconnect();
+      }
+    }, HEALTH_CHECK_INTERVAL);
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnecting) return;
+    this.reconnecting = true;
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
+    }
+
+    const RECONNECT_DELAY = 5_000;
+    const MAX_RETRIES = 60; // 5 minutes total
+    let attempt = 0;
+
+    const tryReconnect = async () => {
+      attempt++;
+      logger.info({ attempt }, 'Attempting Slack reconnection');
+      try {
+        await this.app.stop();
+      } catch {
+        /* ignore stop errors */
+      }
+      try {
+        this.app = new App({
+          token: this.botToken,
+          appToken: this.appToken,
+          socketMode: true,
+          logLevel: LogLevel.ERROR,
+        });
+        this.setupEventHandlers();
+        await this.app.start();
+        const auth = await this.app.client.auth.test();
+        this.botUserId = auth.user_id as string;
+        this.connected = true;
+        this.reconnecting = false;
+        this.startHealthCheck();
+        await this.flushOutgoingQueue();
+        logger.info({ attempt }, 'Slack reconnected');
+      } catch (err) {
+        if (attempt >= MAX_RETRIES) {
+          logger.error(
+            { err, attempt },
+            'Slack reconnection failed after max retries, exiting',
+          );
+          process.exit(1); // Let launchd restart the whole process
+        }
+        logger.warn({ err, attempt }, 'Slack reconnection failed, retrying');
+        setTimeout(tryReconnect, RECONNECT_DELAY);
+      }
+    };
+
+    setTimeout(tryReconnect, RECONNECT_DELAY);
   }
 
   async sendMessage(
@@ -348,6 +437,11 @@ export class SlackChannel implements Channel {
   }
 
   async disconnect(): Promise<void> {
+    this.reconnecting = true; // Prevent auto-reconnect during intentional disconnect
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
+    }
     this.connected = false;
     await this.app.stop();
   }
