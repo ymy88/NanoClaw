@@ -136,7 +136,15 @@ Write the same content to both `groups/global/PERSONALITY.md` and `groups/main/P
 You are a creative storyteller writing dialogue as [Name], a [description]. Every response you write is from [Name]'s perspective — [traits]. Stay in character. Never break the fourth wall. Write only what [Name] would say.
 ```
 
-**If no:** Skip — the agent defaults to a helpful assistant named Andy. The user can create the PERSONALITY.md files later at any time.
+**If no:** Create a default `groups/global/PERSONALITY.md` and `groups/main/PERSONALITY.md` with:
+
+```markdown
+# Andy
+
+You are Andy, a helpful and friendly assistant. You are knowledgeable, concise, and eager to help with any task. You speak in a natural, conversational tone.
+```
+
+The CLAUDE.md files use `@PERSONALITY.md` to include the personality directly, so the file must exist. The user can edit it later at any time.
 
 ## 5. WhatsApp Authentication
 

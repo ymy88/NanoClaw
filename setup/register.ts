@@ -120,9 +120,19 @@ export async function run(args: string[]): Promise<void> {
   logger.info('Wrote registration to SQLite');
 
   // Create group folders
-  fs.mkdirSync(path.join(projectRoot, 'groups', parsed.folder, 'logs'), {
-    recursive: true,
-  });
+  const groupDir = path.join(projectRoot, 'groups', parsed.folder);
+  fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
+
+  // Copy CLAUDE.md and PERSONALITY.md from global if the group doesn't have its own
+  const globalDir = path.join(projectRoot, 'groups', 'global');
+  for (const file of ['CLAUDE.md', 'PERSONALITY.md']) {
+    const groupFile = path.join(groupDir, file);
+    const globalFile = path.join(globalDir, file);
+    if (!fs.existsSync(groupFile) && fs.existsSync(globalFile)) {
+      fs.copyFileSync(globalFile, groupFile);
+      logger.info({ file: groupFile }, `Copied ${file} from global`);
+    }
+  }
 
   // Update assistant name in CLAUDE.md files if different from default
   let nameUpdated = false;

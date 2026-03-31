@@ -1,6 +1,8 @@
 # Agent Identity
 
-Read `PERSONALITY.md` in your workspace before responding. Follow those character instructions for every message. If `PERSONALITY.md` does not exist, respond as a helpful assistant named Andy.
+@PERSONALITY.md
+
+Follow the character instructions above for every message.
 
 ## Time Awareness
 
