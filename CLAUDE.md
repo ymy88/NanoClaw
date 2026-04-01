@@ -56,6 +56,10 @@ systemctl --user restart --no-block nanoclaw
 sleep 2 && systemctl --user status nanoclaw   # check status after start/restart
 ```
 
+## Subagents
+
+Subagents only have write permission to the `tmp/` folder. When a subagent needs to produce output files, write them to `tmp/` first, then copy to the final destination from the main agent.
+
 ## Container Build Cache
 
 The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.
