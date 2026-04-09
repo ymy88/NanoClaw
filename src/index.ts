@@ -125,6 +125,17 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
   // Create group folder
   fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
 
+  // Copy CLAUDE.md and PERSONALITY.md from global if the group doesn't have its own
+  const globalDir = path.resolve(groupDir, '..', 'global');
+  for (const file of ['CLAUDE.md', 'PERSONALITY.md']) {
+    const groupFile = path.join(groupDir, file);
+    const globalFile = path.join(globalDir, file);
+    if (!fs.existsSync(groupFile) && fs.existsSync(globalFile)) {
+      fs.copyFileSync(globalFile, groupFile);
+      logger.info({ file: groupFile }, `Copied ${file} from global`);
+    }
+  }
+
   logger.info(
     { jid, name: group.name, folder: group.folder },
     'Group registered',
